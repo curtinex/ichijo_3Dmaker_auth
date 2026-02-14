@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Streamlitアプリ: 一条工務店CAD図面3D化アプリ
@@ -1842,9 +1842,6 @@ def main():
                 if st.session_state.get("scale_calibration_done"):
                     st.success("スケールを適用しました。手動編集に進んでください。")
                 
-            except Exception as e:
-                st.error(f"スケール校正ビュー表示エラー: {e}")
-            
             # スキップして次へボタンを最後に配置
             if st.button("⏭️ スキップして次へ", use_container_width=True, key="step3_skip"):
                 st.session_state.workflow_step = 3

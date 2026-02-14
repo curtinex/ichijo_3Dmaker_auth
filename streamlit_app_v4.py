@@ -1133,6 +1133,10 @@ def main():
     # --- debug helper: callback to set workflow step reliably ---
     def _set_workflow_step(n: int, open_3d: bool = False):
         st.session_state.setdefault('debug_log', []).append(f"callback: set_workflow {n} (was {st.session_state.get('workflow_step')})")
+        # Require login for protected steps
+        if n >= 2 and st.session_state.get('user') is None:
+            st.warning(f"ステップ{n}はログインが必要です。サイドバーでログインしてください。")
+            return
         st.session_state.workflow_step = n
         if open_3d:
             st.session_state.open_3d_expander = True
@@ -1299,8 +1303,11 @@ def main():
                 run = st.button("🚀 変換を実行", type="primary", use_container_width=True, key="step1_run")
             with col_skip:
                 if st.button("⏭️ スキップ", use_container_width=True, key="step1_skip"):
-                    st.session_state.workflow_step = 2
-                    st.rerun()
+                    if st.session_state.get('user') is None:
+                        st.warning("ステップ2はログインが必要です。サイドバーでログインしてください。")
+                    else:
+                        st.session_state.workflow_step = 2
+                        st.rerun()
         else:
             # アップロード前のデフォルト値を設定
             dpi = 300
@@ -1725,8 +1732,11 @@ def main():
                                 # 3D表示を開く
                                 st.session_state.open_3d_expander = True
                                 # 手動編集へ遷移
-                                st.session_state.workflow_step = 3
-                                st.rerun()
+                                if st.session_state.get('user') is None:
+                                    st.warning("ステップ3はログインが必要です。サイドバーでログインしてください。")
+                                else:
+                                    st.session_state.workflow_step = 3
+                                    st.rerun()
                         except Exception as e:
                             st.error(f"❌ スケール更新でエラーが発生しました: {e}")
                             import traceback
@@ -1842,9 +1852,12 @@ def main():
             
             # スキップして次へボタンを最後に配置
             if st.button("⏭️ スキップして次へ", use_container_width=True, key="step3_skip"):
-                st.session_state.workflow_step = 3
-                st.session_state.open_3d_expander = True
-                st.rerun()
+                if st.session_state.get('user') is None:
+                    st.warning("ステップ3はログインが必要です。サイドバーでログインしてください。")
+                else:
+                    st.session_state.workflow_step = 3
+                    st.session_state.open_3d_expander = True
+                    st.rerun()
     # ============= ステップ3: 手動編集 =============
     with st.expander("Step 3：手動編集", expanded=(st.session_state.workflow_step == 3)):
         if st.session_state.workflow_step >= 3 and st.session_state.processed:

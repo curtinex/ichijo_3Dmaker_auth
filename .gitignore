@@ -205,3 +205,29 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project specific: Streamlit outputs
+outputs/
+data/
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.json
+*.html
+*.zip
+
+# Keep example files (if needed)
+!example.pdf
+
+# Ignore README.md (contains technical information)
+README.md
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Allow window catalog JSON to be tracked despite general *.json ignore
+!window_catalog.json
+
+# Streamlit secrets
+.streamlit/secrets.toml

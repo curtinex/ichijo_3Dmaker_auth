@@ -1,0 +1,11 @@
+
+streamlit
+numpy
+Pillow
+PyMuPDF
+streamlit-image-coordinates
+opencv-python-headless
+
+# Image processing
+scikit-image
+scipy

@@ -9,3 +9,4 @@ opencv-python-headless
 # Image processing
 scikit-image
 scipy
+supabase

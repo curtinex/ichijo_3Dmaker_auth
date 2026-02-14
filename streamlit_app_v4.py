@@ -129,6 +129,59 @@ import streamlit as st
 import fitz  # PyMuPDF (for page count)
 from streamlit_image_coordinates import streamlit_image_coordinates
 from PIL import Image
+# --- Supabase helper and simple Auth UI (uses SUPA_URL and SUPA_ANON from Streamlit secrets) ---
+def get_supabase():
+    import streamlit as _st
+    try:
+        url = _st.secrets.get("SUPA_URL")
+        key = _st.secrets.get("SUPA_ANON")
+    except Exception:
+        return None
+    if not url or not key:
+        return None
+    try:
+        from supabase import create_client
+        return create_client(url, key)
+    except Exception as e:
+        try:
+            _st.error(f"Supabase client init error: {type(e).__name__}: {e}")
+        except Exception:
+            pass
+        return None
+
+with st.sidebar.expander("Account"):
+    supabase = get_supabase()
+    if supabase is None:
+        st.write("Supabase not configured. Set SUPA_URL and SUPA_ANON in Streamlit secrets.")
+    else:
+        auth_mode = st.radio("Auth", ("Login", "Sign up", "Logout"))
+        if auth_mode == "Sign up":
+            su_email = st.text_input("Email", key="su_email")
+            su_pwd = st.text_input("Password", type="password", key="su_pwd")
+            if st.button("Create account", key="su_btn"):
+                try:
+                    res = supabase.auth.sign_up({"email": su_email, "password": su_pwd})
+                    st.success("確認メールを送信しました。メールのリンクでアカウントを有効化してください。")
+                except Exception as e:
+                    st.error(f"Sign up failed: {type(e).__name__}: {e}")
+        elif auth_mode == "Login":
+            li_email = st.text_input("Email", key="li_email")
+            li_pwd = st.text_input("Password", type="password", key="li_pwd")
+            if st.button("Login", key="li_btn"):
+                try:
+                    session = supabase.auth.sign_in_with_password({"email": li_email, "password": li_pwd})
+                    st.session_state['user'] = session
+                    st.success("ログインしました")
+                except Exception as e:
+                    st.error(f"Login failed: {type(e).__name__}: {e}")
+        else:
+            if st.button("Logout", key="lo_btn"):
+                try:
+                    supabase.auth.sign_out()
+                except Exception:
+                    pass
+                st.session_state.pop('user', None)
+                st.success("ログアウトしました")
 
 # ichijo_core から全モジュールをインポート（必須）
 try:

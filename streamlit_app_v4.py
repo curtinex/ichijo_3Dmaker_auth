@@ -1542,6 +1542,10 @@ def main():
 
 
     with st.expander("Step 2：スケール校正", expanded=(st.session_state.workflow_step == 2)):
+        # Gate Step 2 UI behind login: show warning and skip internals when not logged in
+        if st.session_state.get('user') is None:
+            st.warning("ステップ2はログインが必要です。サイドバーでログインしてください。")
+            st.stop()
         if st.session_state.workflow_step >= 2 and st.session_state.processed:
             st.divider()
             st.markdown("## ステップ ②  スケール校正")
@@ -1860,6 +1864,10 @@ def main():
                     st.rerun()
     # ============= ステップ3: 手動編集 =============
     with st.expander("Step 3：手動編集", expanded=(st.session_state.workflow_step == 3)):
+        # Gate Step 3 UI behind login: show warning and skip internals when not logged in
+        if st.session_state.get('user') is None:
+            st.warning("ステップ3はログインが必要です。サイドバーでログインしてください。")
+            st.stop()
         if st.session_state.workflow_step >= 3 and st.session_state.processed:
             st.divider()
             st.markdown("## ステップ ③ 手動編集")

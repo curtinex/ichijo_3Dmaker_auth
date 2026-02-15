@@ -1872,7 +1872,6 @@ def main():
         # Gate Step 3 UI behind login: show warning and skip internals when not logged in
         if st.session_state.get('user') is None:
             st.warning("ステップ3はログインが必要です。サイドバーでログインしてください。")
-            st.stop()
         else:
             if st.session_state.workflow_step >= 3 and st.session_state.processed:
                 st.divider()

@@ -1547,17 +1547,18 @@ def main():
 
 
     with st.expander("Step 2：スケール校正", expanded=(st.session_state.workflow_step == 2)):
-        # Gate Step 2 UI behind login: show warning and skip internals when not logged in
-        if st.session_state.get('user') is None:
+        # Gate Step 2 UI behind login: show warning and stop execution when not logged in
+        if not st.session_state.get('user'):
             st.warning("ステップ2はログインが必要です。サイドバーでログインしてください。")
-        else:
-            if st.session_state.workflow_step >= 2 and st.session_state.processed:
-                st.divider()
-                st.markdown("## ステップ ②  スケール校正")
-            st.info(
-                "基準となる壁を選択して、修正スケール値を入力して実行してください。(一条CAD図面 1マス = 編集画面 2マス推奨)\n\n"
-                "変更ない場合は「スキップして次へ」を選択してください"
-            )
+            st.stop()
+
+        if st.session_state.workflow_step >= 2 and st.session_state.processed:
+            st.divider()
+            st.markdown("## ステップ ②  スケール校正")
+        st.info(
+            "基準となる壁を選択して、修正スケール値を入力して実行してください。(一条CAD図面 1マス = 編集画面 2マス推奨)\n\n"
+            "変更ない場合は「スキップして次へ」を選択してください"
+        )
 
         # 壁選択用の簡易編集エリアを即時表示
         #st.caption("壁線を1回クリックすると赤色にハイライトします。選択しない場合はスキップで次へ進めます。")
@@ -1869,13 +1870,14 @@ def main():
                     st.rerun()
     # ============= ステップ3: 手動編集 =============
     with st.expander("Step 3：手動編集", expanded=(st.session_state.workflow_step == 3)):
-        # Gate Step 3 UI behind login: show warning and skip internals when not logged in
-        if st.session_state.get('user') is None:
+        # Gate Step 3 UI behind login: show warning and stop execution when not logged in
+        if not st.session_state.get('user'):
             st.warning("ステップ3はログインが必要です。サイドバーでログインしてください。")
-        else:
-            if st.session_state.workflow_step >= 3 and st.session_state.processed:
-                st.divider()
-                st.markdown("## ステップ ③ 手動編集")
+            st.stop()
+
+        if st.session_state.workflow_step >= 3 and st.session_state.processed:
+            st.divider()
+            st.markdown("## ステップ ③ 手動編集")
         # --- 自動結合の現在値表示と再実行ボタン ---
         # 自動結合の手動操作UIは不要のため削除しました。
         # 固定パラメータを使用します: merge_radius=55px, merge_angle=15°

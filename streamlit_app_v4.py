@@ -530,6 +530,14 @@ try:
                             dy = wall['end'][1] - wall['start'][1]
                             wall['length'] = round(math.sqrt(dx**2 + dy**2), 3)
                             break
+                    # 正規化: start/end の順序を一貫させる（表示の角度不一致を防止）
+                    for wall in walls:
+                        if wall['id'] == first_wall_id:
+                            sx, sy = wall['start'][0], wall['start'][1]
+                            ex, ey = wall['end'][0], wall['end'][1]
+                            if (sx > ex) or (sx == ex and sy > ey):
+                                wall['start'], wall['end'] = wall['end'], wall['start']
+                            break
                     walls[:] = [w for w in walls if w['id'] not in other_wall_ids]
                 elif 'wall1' in pair and 'wall2' in pair:
                     wall1_id = pair['wall1']['id']
@@ -561,6 +569,14 @@ try:
                             dx = wall['end'][0] - wall['start'][0]
                             dy = wall['end'][1] - wall['start'][1]
                             wall['length'] = round(math.sqrt(dx**2 + dy**2), 3)
+                            break
+                    # 正規化: start/end の順序を一貫させる（表示の角度不一致を防止）
+                    for wall in walls:
+                        if wall['id'] == wall1_id:
+                            sx, sy = wall['start'][0], wall['start'][1]
+                            ex, ey = wall['end'][0], wall['end'][1]
+                            if (sx > ex) or (sx == ex and sy > ey):
+                                wall['start'], wall['end'] = wall['end'], wall['start']
                             break
                     walls[:] = [w for w in walls if w['id'] != wall2_id]
             updated_data['metadata']['total_walls'] = len(walls)
@@ -5426,22 +5442,6 @@ def main():
                 
                 # 編集済み3DビューアHTML（viewer_html_bytesを常に表示）
                 if st.session_state.viewer_html_bytes:
-                    #st.download_button(
-                    #label=" 編集済み3Dモデルをダウンロード",
-                    #data=st.session_state.viewer_html_bytes,
-                    #type="primary",
-                    #file_name=st.session_state.viewer_html_name,
-                    #mime="text/html"
-                    #)
-                    
-                    # 編集済み3Dビューアを表示
-                    #st.subheader("🎨 編集済み3Dビューア")
-                    #import streamlit.components.v1 as components
-                    #components.html(
-                    #st.session_state.viewer_html_bytes.decode('utf-8'),
-                    #height=600,
-                    #scrolling=True
-                    #)
                     pass
                 else:
                     # 可視化画像がない場合のエラーメッセージ

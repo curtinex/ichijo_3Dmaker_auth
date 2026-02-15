@@ -1135,7 +1135,12 @@ def main():
         st.session_state.setdefault('debug_log', []).append(f"callback: set_workflow {n} (was {st.session_state.get('workflow_step')})")
         # Require login for protected steps
         if n >= 2 and st.session_state.get('user') is None:
+            # If the caller specifically requested opening the 3D expander, allow
+            # the viewer to open even for anonymous users, but do not advance
+            # the protected workflow step.
             st.warning(f"ステップ{n}はログインが必要です。サイドバーでログインしてください。")
+            if open_3d:
+                st.session_state.open_3d_expander = True
             return
         st.session_state.workflow_step = n
         if open_3d:

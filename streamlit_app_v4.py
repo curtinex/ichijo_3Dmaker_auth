@@ -1724,17 +1724,35 @@ def main():
                                     # 保存と再可視化
                                     json_path.write_text(json.dumps(calibrated_json, indent=2, ensure_ascii=False))
                                     st.session_state.json_bytes = json_path.read_bytes()
-                                    viz_path = out_dir / st.session_state.viz_name
-                                    visualize_3d_walls(
-                                        str(json_path),
-                                        str(viz_path),
-                                        scale=int(st.session_state.viz_scale),
-                                        wall_color=(0, 0, 0),
-                                        bg_color=(255, 255, 255)
-                                    )
-                                    if viz_path.exists():
-                                        st.session_state.viz_bytes = viz_path.read_bytes()
 
+                                    # まずは必ず 3D ビューア HTML を再生成してセッションに反映
+                                    try:
+                                        viewer_html = out_dir / (st.session_state.viewer_html_name if st.session_state.get('viewer_html_name') else 'viewer_3d.html')
+                                        _generate_3d_viewer_html(json_path, viewer_html)
+                                        if viewer_html.exists():
+                                            st.session_state.viewer_html_bytes = viewer_html.read_bytes()
+                                            st.session_state.viewer_html_name = viewer_html.name
+                                            st.session_state.setdefault('debug_log', []).append(f'viewer regenerated: {viewer_html.name}')
+                                        else:
+                                            st.session_state.setdefault('debug_log', []).append('viewer regen: file not found')
+                                    except Exception:
+                                        import traceback
+                                        st.session_state.setdefault('debug_log', []).append('viewer regen failed: ' + traceback.format_exc())
+
+                                    # 可視化画像は可能なら更新（ビューアと独立して更新）
+                                    viz_path = out_dir / st.session_state.viz_name
+                                    try:
+                                        visualize_3d_walls(
+                                            str(json_path),
+                                            str(viz_path),
+                                            scale=int(st.session_state.viz_scale),
+                                            wall_color=(0, 0, 0),
+                                            bg_color=(255, 255, 255)
+                                        )
+                                        if viz_path.exists():
+                                            st.session_state.viz_bytes = viz_path.read_bytes()
+                                    except Exception:
+                                        st.session_state.setdefault('debug_log', []).append('viz regen failed: ' + traceback.format_exc())
                                     # 後続用に状態更新
                                     st.session_state.scale_calibration_done = True
                                     st.session_state.selected_wall_for_calibration = None

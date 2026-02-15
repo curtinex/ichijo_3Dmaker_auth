@@ -578,6 +578,19 @@ try:
                             if (sx > ex) or (sx == ex and sy > ey):
                                 wall['start'], wall['end'] = wall['end'], wall['start']
                             break
+                    # デバッグ: 結合後の角度を 2D/3D 表現でログに残す
+                    try:
+                        w = next((ww for ww in walls if ww['id'] == wall1_id), None)
+                        if w is not None:
+                            # 2D 角度（degrees）: ichijo_core のユーティリティに合わせる
+                            angle2d = _wall_angle_deg(w)
+                            # 3D 角度（degrees）: Three.js 側で使用する atan2(z, x) を模倣
+                            dx = w['end'][0] - w['start'][0]
+                            dy = w['end'][1] - w['start'][1]
+                            angle3d = math.degrees(math.atan2(-dy, dx))
+                            st.session_state.setdefault('debug_log', []).append(f"merge: wall_id={wall1_id} angle2d={angle2d:.2f}deg angle3d={angle3d:.2f}deg start={w['start']} end={w['end']}")
+                    except Exception:
+                        pass
                     walls[:] = [w for w in walls if w['id'] != wall2_id]
             updated_data['metadata']['total_walls'] = len(walls)
             return updated_data

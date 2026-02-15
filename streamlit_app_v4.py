@@ -1872,10 +1872,10 @@ def main():
         # Gate Step 3 UI behind login: show warning and skip internals when not logged in
         if st.session_state.get('user') is None:
             st.warning("ステップ3はログインが必要です。サイドバーでログインしてください。")
-            st.stop()
-        if st.session_state.workflow_step >= 3 and st.session_state.processed:
-            st.divider()
-            st.markdown("## ステップ ③ 手動編集")
+        else:
+            if st.session_state.workflow_step >= 3 and st.session_state.processed:
+                st.divider()
+                st.markdown("## ステップ ③ 手動編集")
         # --- 自動結合の現在値表示と再実行ボタン ---
         # 自動結合の手動操作UIは不要のため削除しました。
         # 固定パラメータを使用します: merge_radius=55px, merge_angle=15°

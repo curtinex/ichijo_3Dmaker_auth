@@ -5434,23 +5434,6 @@ def main():
 
     # ============= 3Dビュー表示（Step3の下） =============
     with st.expander("🔭 3Dビュー", expanded=st.session_state.get('open_3d_expander', False)):
-        # Debug info: show key session_state flags to help diagnose why viewer may not render
-        try:
-            st.markdown("### 🐞 デバッグ情報")
-            st.write({
-                'workflow_step': st.session_state.get('workflow_step'),
-                'processed': st.session_state.get('processed'),
-                'open_3d_expander': st.session_state.get('open_3d_expander'),
-                'viz_bytes_present': bool(st.session_state.get('viz_bytes')),
-                'viewer_html_present': bool(st.session_state.get('viewer_html_bytes')),
-                'viewer_html_name': st.session_state.get('viewer_html_name'),
-                'out_dir': st.session_state.get('out_dir')
-            })
-            if 'debug_log' in st.session_state:
-                st.caption('最近の内部ログ')
-                st.write(st.session_state.get('debug_log')[-10:])
-        except Exception:
-            pass
 
         if st.session_state.get('processed', False) and st.session_state.get('viz_bytes'):
             

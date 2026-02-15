@@ -16,145 +16,468 @@ def install_ichijo_core():
     # **優先: ローカルのichijo_core_checkディレクトリを使用**
     # 現在のファイルの親ディレクトリにichijo_core_checkが存在するか確認
     current_dir = os.path.dirname(os.path.abspath(__file__))
-        # --- 自動結合の現在値表示と再実行ボタン ---
-        # 自動結合の手動操作UIは不要のため削除しました。
-        # 固定パラメータを使用します: merge_radius=55px, merge_angle=15°
+    local_ichijo_path = os.path.join(current_dir, "ichijo_core_check")
+    
+    if os.path.exists(local_ichijo_path) and os.path.isdir(local_ichijo_path):
+        # ローカルのichijo_core_checkをsys.pathに追加
+        if local_ichijo_path not in sys.path:
+            sys.path.insert(0, local_ichijo_path)
         
-        # 以下の内容はログイン時のみ表示されます
-        if st.session_state.get('user'):
-            cur_merge_radius = 55
-            cur_merge_angle = 15
-            merged_flag = st.session_state.get('merged_processed', False)
-            # st.write("壁線を手動で編集・調整します。")
+        try:
+            import ichijo_core
+            # ローカル版のインポート成功
+            return True, None
+        except Exception as e:
+            # ローカル版のインポート失敗 → GitHubからインストールを試みる
+            pass
+    
+    # **フォールバック: GitHubからインストール**
+    # 既存のインポートチェック（バージョン確認）
+    try:
+        import ichijo_core
+        
+        # バージョンが期待値と一致するかチェック（0.0.13系を許可）
+        if ichijo_core.__version__.startswith("0.0.13"):
+            return True, None
+        else:
+            # 強制的に再インストール
+            pass
+    except Exception as e:
+        pass
+    
+    # GitHubからインストール
+    try:
+        import streamlit as st_temp
+        
+        if not hasattr(st_temp, 'secrets') or 'GITHUB_TOKEN' not in st_temp.secrets:
+            error_msg = "GITHUB_TOKEN not found in Streamlit secrets"
+            return False, error_msg
+        
+        token = st_temp.secrets['GITHUB_TOKEN']
+        
+        # インストール用の一時ディレクトリ
+        import tempfile
+        target_dir = tempfile.mkdtemp(prefix="ichijo_core_")
+        
+        if target_dir not in sys.path:
+            sys.path.insert(0, target_dir)
+        
+        # 最新コミット（aaed720: 階段パターン生成関数をstair_utilsに移行）を指定
+        commit_hash = "aaed720"
+        install_url = f"git+https://{token}@github.com/curtinex/ichijo_core.git@{commit_hash}"
+        
+        # アンインストール
+        subprocess.run(
+            [sys.executable, "-m", "pip", "uninstall", "-y", "ichijo_core"],
+            capture_output=True,
+            text=True
+        )
+        
+        # インストール
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--target", target_dir, "--force-reinstall", "--no-cache-dir", install_url],
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        
+        if result.returncode == 0:
+            # インポートキャッシュをクリア
+            import importlib
+            importlib.invalidate_caches()
             
-            # モード選択タブ
-            edit_mode = st.radio(
-                "編集モードを選択:",
-                #["線を結合", "線を追加", "線を削除", "窓を追加", "照明を配置", "オブジェクトを配置", "床を追加", "階段を配置"],
-                ["線を結合", "線を追加", "線を削除", "窓を追加", "オブジェクトを配置", "階段を配置"],
-                horizontal=True,
-                help="線を結合：2つの壁線を繋ぐ\n\n線を追加：新しい壁線を追加\n\n線を削除：選択範囲の壁を削除\n\n窓を追加：窓で分断された2本の壁を上下の壁で繋ぐ\n\nオブジェクトを配置：キッチンボードなどの家具を配置\n\n階段を配置：コの字階段を配置"
-            )
-
-            if edit_mode == "線を結合":
-                st.write("💡 結合したい2本の壁線を選択してください。（複数選択可能）" )
-            elif edit_mode == "窓を追加":
-                st.write("💡 窓追加したい2本の壁線を選択して、窓タイプを入力してください。（複数選択可能）")
-            elif edit_mode == "線を追加":
-                st.write("💡 追加したい壁の端点2点を指定してください。（複数選択可能）")
-            elif edit_mode == "線を削除":
-                st.write("💡 削除したい壁線をクリックしてください（複数選択可能）")
-            elif edit_mode == "オブジェクトを配置":
-                st.write("💡 オブジェクトを配置したい範囲(四角形)の対角線の2点を選択して、オブジェクトタイプを入力してください。")
-            elif edit_mode == "階段を配置":
-                st.write("💡 階段を配置したい範囲を2点クリックして選択し、階段パターンをプルダウンから選んでください")
-
-            with st.expander("💡 使い方", expanded=False):
-                if edit_mode == "線を結合":
-                    st.markdown(
-                        "**複数線結合の手順:**\n\n"
-                        "1. 下の画像上で結合したい**1本目の壁線をクリック**して選択\n\n"
-                        "2. **2本目の壁線をクリック**して選択\n\n"
-                        "3. さらに結合したい箇所があれば手順1-2を繰り返す（2本ずつペアで選択）\n\n"
-                        "4. 「🔗 結合実行」で選択した全てのペアを一括結合\n\n"
-                        "**ヒント:**\n\n"
-                        "- 壁線を直接クリックするだけで選択できます\n\n"
-                        "- 間違えた場合は同じ壁をもう一度クリックで選択解除"
-                    )
-                elif edit_mode == "窓を追加":
-                    st.markdown(
-                        "**窓追加の手順:**\n\n"
-                        "1. 下の画像上で窓を追加したい**1本目の壁線をクリック**して選択\n\n"
-                        "2. **2本目の壁線をクリック**して選択\n\n"
-                        "3. さらに窓を追加したければ手順1-2を繰り返す\n\n"
-                        "4. 窓のサイズを入力:\n\n"
-                        "   - 窓の高さ（mm）: 例 1200mm\n\n"
-                        "   - 床から窓下端までの高さ（mm）: 例 900mm\n\n"
-                        "5. 「🪟 窓追加実行」で選択した全ての窓を一括追加\n\n"
-                        "**ヒント:**\n\n"
-                        "- 壁線を直接クリックするだけで選択できます\n\n"
-                        "- 間違えた場合は同じ壁をもう一度クリックで選択解除\n\n"
-                        "- 一条工務店の図面表記からそのまま入力可能"
-                    )
-                elif edit_mode == "線を追加":
-                    st.markdown(
-                        "**線追加の手順:**\n\n"
-                        "1. 下の画像上で**2回クリック**して追加したい線の位置を選択する\n\n"
-                        "2. さらに線を追加したければ手順1を繰り返す\n\n"
-                        "3. 「➕ 線追加実行」で全ての選択範囲に線を追加\n\n"
-                    )
-                elif edit_mode == "線を削除":
-                    st.markdown(
-                        "**線削除の手順:**\n\n"
-                        "1. 下の画像上で削除したい**壁線をクリック**して選択\n\n"
-                        "2. さらに削除したい壁線があればクリックして追加\n\n"
-                        "3. 「🗑️ 削除実行」で選択した全ての壁線を一括削除\n\n"
-                        "**ヒント:**\n\n"
-                        "- 壁線を直接クリックするだけで選択できます\n\n"
-                        "- 間違えた場合は同じ壁をもう一度クリックで選択解除"
-                    )
-                elif edit_mode == "オブジェクトを配置":
-                    st.markdown(
-                        "**オブジェクト配置の手順:**\n\n"
-                        "1. 下の画像上で**2回クリック**してオブジェクトを配置したい領域を四角形で囲む\n\n"
-                        "2. 配置するオブジェクト高さと色を選択\n\n"
-                        "3. 「🪑 オブジェクト配置実行」で家具を配置\n\n"
-                        )
-                elif edit_mode == "階段を配置":
-                    st.markdown(
-                        "**階段配置の手順:**\n\n"
-                        "1. 下の画像上で**2回クリック**して階段を配置したい領域を四角形で囲む\n\n"
-                        "2. 階段パターンをプルダウンから選択\n\n"
-                        "3. 「🪜 階段配置実行」で階段を配置\n\n"
-                        "**注意:**\n\n"
-                        "- コの字階段は実際の階段形状と異なります。"
-                        )
+            # インポート確認
+            import ichijo_core
+            return True, None
+        else:
+            error_msg = f"Installation failed: {result.stderr[:500]}"
+            return False, error_msg
             
-            # セッションステートで四角形座標を管理
-            if 'rect_coords' not in st.session_state:
-                st.session_state.rect_coords = []
-            if 'rect_coords_list' not in st.session_state:
-                st.session_state.rect_coords_list = []  # 確定した四角形のリスト
-            if 'reset_flag' not in st.session_state:
-                st.session_state.reset_flag = False
-            if 'last_click' not in st.session_state:
-                st.session_state.last_click = None
-            if 'merge_result' not in st.session_state:
-                st.session_state.merge_result = None
-            if 'edit_mode_state' not in st.session_state:
-                st.session_state.edit_mode_state = "線を結合"  # 現在のモード
+    except Exception as e:
+        error_msg = f"Error: {type(e).__name__}: {str(e)}"
+        return False, error_msg
 
-            # 窓追加用の入力フォーム（画面上部にまとめて表示）
-            if edit_mode == "窓を追加":
+# アプリ起動時に一度だけインストール
+success, error_detail = install_ichijo_core()
+if not success:
+    import streamlit as st
+    st.error("❌ ichijo_core のロードに失敗しました")
+    if error_detail:
+        with st.expander("🔍 エラー詳細を表示"):
+            st.code(error_detail)
+    st.info("""
+    **トラブルシューティング:**
+    
+    1. Streamlit Cloud の **Settings → Secrets** で `GITHUB_TOKEN` が正しく設定されているか確認
+    2. トークンの形式: `GITHUB_TOKEN = "ghp_xxxxxxxxxxxx"`
+    3. トークンの権限: Contents (Read-only), ichijo_core リポジトリへのアクセス権
+    4. アプリを再起動してみてください
+    """)
+    st.stop()
+
+import io
+import re
+import time
+import json
+import math
+from pathlib import Path
+from datetime import datetime
+import zipfile
+
+import numpy as np
+import streamlit as st
+import fitz  # PyMuPDF (for page count)
+from streamlit_image_coordinates import streamlit_image_coordinates
+from PIL import Image
+# --- Supabase helper and simple Auth UI (uses SUPA_URL and SUPA_ANON from Streamlit secrets) ---
+def get_supabase():
+    import streamlit as _st
+    try:
+        url = _st.secrets.get("SUPA_URL")
+        key = _st.secrets.get("SUPA_ANON")
+    except Exception:
+        return None
+    if not url or not key:
+        return None
+    try:
+        from supabase import create_client
+        return create_client(url, key)
+    except Exception as e:
+        try:
+            _st.error(f"Supabase client init error: {type(e).__name__}: {e}")
+        except Exception:
+            pass
+        return None
+
+with st.sidebar.expander("Account"):
+    supabase = get_supabase()
+    if supabase is None:
+        st.write("Supabase not configured. Set SUPA_URL and SUPA_ANON in Streamlit secrets.")
+    else:
+        auth_mode = st.radio("Auth", ("Login", "Sign up", "Logout"))
+        if auth_mode == "Sign up":
+            su_email = st.text_input("Email", key="su_email")
+            su_pwd = st.text_input("Password", type="password", key="su_pwd")
+            if st.button("Create account", key="su_btn"):
                 try:
-                    json_data_tmp = json.loads(st.session_state.json_bytes.decode("utf-8"))
-                    walls_tmp = json_data_tmp.get('walls', [])
-                    heights_tmp = [w.get('height', 2.4) for w in walls_tmp if 'height' in w]
-                    default_room_height = min(max(heights_tmp) if heights_tmp else 2.4, 10.0)
+                    res = supabase.auth.sign_up({"email": su_email, "password": su_pwd})
+                    st.success("確認メールを送信しました。メールのリンクでアカウントを有効化してください。")
+                except Exception as e:
+                    st.error(f"Sign up failed: {type(e).__name__}: {e}")
+        elif auth_mode == "Login":
+            li_email = st.text_input("Email", key="li_email")
+            li_pwd = st.text_input("Password", type="password", key="li_pwd")
+            if st.button("Login", key="li_btn"):
+                try:
+                    session = supabase.auth.sign_in_with_password({"email": li_email, "password": li_pwd})
+                    st.session_state['user'] = session
+                    st.success("ログインしました")
+                except Exception as e:
+                    st.error(f"Login failed: {type(e).__name__}: {e}")
+        else:
+            if st.button("Logout", key="lo_btn"):
+                try:
+                    supabase.auth.sign_out()
                 except Exception:
-                    default_room_height = 2.4
-
-                # 窓追加モード以外の場合のみ、上部に窓パラメータ入力を表示
-                if edit_mode != "窓を追加":
-                    # 他のモード用の処理（必要に応じて）
                     pass
+                st.session_state.pop('user', None)
+                st.success("ログアウトしました")
 
-            # 四角形の色定義（OpenCV BGRフォーマット）
-            RECT_COLORS = [
-                (255, 0, 0),      # 赤
-                (0, 255, 0),      # 緑
-                (0, 0, 255),      # 青
-                (255, 255, 0),    # 黄
-                (255, 0, 255),    # マゼンタ
-                (0, 255, 255),    # シアン
+# ichijo_core から全モジュールをインポート（必須）
+try:
+    from ichijo_core.pdf_to_image import pdf_to_image
+    from ichijo_core.refine_from_image import refine_floor_plan_from_image
+    from ichijo_core.extract_walls_to_3d_v2 import process_image_to_3d
+    from ichijo_core.visualize_3d_walls import visualize_3d_walls
+    from ichijo_core.auto_merge_walls import WallAutoMerger
+    from ichijo_core.geometry_utils import (
+        calc_distance as _calc_distance,
+        calc_angle_diff as _calc_angle_diff,
+        wall_angle_deg as _wall_angle_deg,
+        angle_diff_deg as _angle_diff_deg,
+        determine_line_direction as _determine_line_direction,
+    )
+    from ichijo_core.furniture_utils import (
+        FURNITURE_HEIGHT_OPTIONS,
+        FURNITURE_COLOR_OPTIONS,
+    )
+    from ichijo_core.stair_utils import (
+        STAIR_PATTERNS,
+    )
+    from ichijo_core.ui_helpers import (
+        prepare_display_from_pil as _prepare_display_from_pil,
+        prepare_display_from_bytes as _prepare_display_from_bytes,
+        display_to_original as _display_to_original,
+        display_to_meter as _display_to_meter,
+        save_uploaded_file as _save_uploaded_file,
+        generate_3d_viewer_html as _generate_3d_viewer_html,
+    )
+    
+    # window_utilsとwall_editingのインポート（ichijo_coreは使わずフォールバック版のみ使用）
+    try:
+        # ichijo_coreがあってもフォールバック版を使う（ID生成の修正を確実に適用）
+        raise ImportError("Force use of fallback functions")
+    except ImportError as e:
+        # フォールバック関数を定義
+        import copy
+        def add_window_walls(json_data, wall1, wall2, window_height, base_height, room_height, window_model=None, window_height_mm=None):
+            """窓で分断された2本の壁の間に、床側と天井側の壁を追加（フォールバック版）"""
+            updated_data = copy.deepcopy(json_data)
+            walls = updated_data['walls']
+            endpoints = [
+                (wall1['start'], wall2['start']),
+                (wall1['start'], wall2['end']),
+                (wall1['end'], wall2['start']),
+                (wall1['end'], wall2['end']),
             ]
-
-            # 距離閾値（メートル）: 手動結合時に近接した別壁と誤結合しないよう、実用的な閾値を使用
-            # 0.3m（30cm）程度に設定。必要に応じて調整してください。
-            distance_threshold = 0.3
-
-            # 以下、元の編集UIロジック（長大） — ログイン時のみ実行されます
-            # （中略: 以降の編集UI処理はそのまま継続）
+            min_dist = float('inf')
+            window_start = None
+            window_end = None
+            for p1, p2 in endpoints:
+                dist = math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+                if dist < min_dist:
+                    min_dist = dist
+                    window_start = p1
+                    window_end = p2
+            thicknesses = [w.get('thickness', 0.12) for w in walls if 'thickness' in w]
+            default_thickness = sum(thicknesses) / len(thicknesses) if thicknesses else 0.12
+            
+            # 既存のIDを全て取得して、最大値を確実に取得（重複回避）
+            existing_ids = []
+            for w in walls:
+                try:
+                    existing_ids.append(int(w['id']))
+                except (ValueError, TypeError):
+                    pass
+            max_id = max(existing_ids) if existing_ids else 0
+            
+            added_walls = []
+            floor_wall = {
+                'id': max_id + 1,
+                'start': [round(window_start[0], 3), round(window_start[1], 3)],
+                'end': [round(window_end[0], 3), round(window_end[1], 3)],
+                'height': round(base_height, 3),
+                'base_height': 0.0,
+                'length': round(min_dist, 3),
+                'thickness': round(default_thickness, 3),
+                'source': 'window_added',
+                'window_model': window_model,
+                'window_height_mm': window_height_mm,
+                'window_base_m': round(base_height, 3),
+                'window_base_mm': int(round(base_height * 1000))
+            }
+            walls.append(floor_wall)
+            added_walls.append(floor_wall)
+            ceiling_height = room_height - (base_height + window_height)
+            ceiling_wall = {
+                'id': max_id + 2,
+                'start': [round(window_start[0], 3), round(window_start[1], 3)],
+                'end': [round(window_end[0], 3), round(window_end[1], 3)],
+                'height': round(ceiling_height, 3),
+                'base_height': round(base_height + window_height, 3),
+                'length': round(min_dist, 3),
+                'thickness': round(default_thickness, 3),
+                'source': 'window_added',
+                'window_model': window_model,
+                'window_height_mm': window_height_mm,
+                'window_base_m': round(base_height + window_height, 3),
+                'window_base_mm': int(round((base_height + window_height) * 1000))
+            }
+            walls.append(ceiling_wall)
+            added_walls.append(ceiling_wall)
+            updated_data['metadata']['total_walls'] = len(walls)
+            return updated_data, added_walls
+        
+        def find_closest_wall_to_point(walls, point_px, scale, margin, img_height, min_x, min_y, max_x, max_y):
+            """ポイントから最も近い壁を見つける（フォールバック版）"""
+            min_distance = float('inf')
+            closest_wall = None
+            point_m = [
+                (point_px[0] - margin) / scale + min_x,
+                (img_height - point_px[1] - margin) / scale + min_y
+            ]
+            for wall in walls:
+                try:
+                    start = wall.get('start')
+                    end = wall.get('end')
+                    if not isinstance(start, (list, tuple)) or not isinstance(end, (list, tuple)):
+                        continue
+                    if len(start) < 2 or len(end) < 2:
+                        continue
+                    x1, y1 = float(start[0]), float(start[1])
+                    x2, y2 = float(end[0]), float(end[1])
+                except (TypeError, ValueError, KeyError):
+                    continue
+                dx = x2 - x1
+                dy = y2 - y1
+                if dx == 0 and dy == 0:
+                    distance = math.sqrt((point_m[0] - x1)**2 + (point_m[1] - y1)**2)
+                else:
+                    t = max(0, min(1, ((point_m[0] - x1) * dx + (point_m[1] - y1) * dy) / (dx**2 + dy**2)))
+                    closest_x = x1 + t * dx
+                    closest_y = y1 + t * dy
+                    distance = math.sqrt((point_m[0] - closest_x)**2 + (point_m[1] - closest_y)**2)
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_wall = wall
+            return closest_wall, min_distance
+        
+        # wall_editing関数のフォールバック（7つの関数）
+        def _point_to_line_segment_distance(px, py, x1, y1, x2, y2):
+            """点から線分までの最短距離を計算（フォールバック版）"""
+            dx = x2 - x1
+            dy = y2 - y1
+            len_sq = dx * dx + dy * dy
+            if len_sq == 0:
+                return math.sqrt((px - x1)**2 + (py - y1)**2)
+            t = max(0, min(1, ((px - x1) * dx + (py - y1) * dy) / len_sq))
+            nearest_x = x1 + t * dx
+            nearest_y = y1 + t * dy
+            return math.sqrt((px - nearest_x)**2 + (py - nearest_y)**2)
+        
+        def _find_nearest_wall_from_click(click_x, click_y, walls, scale, margin, img_height, min_x, min_y, max_x, max_y, threshold=20):
+            """クリック位置から最も近い壁を検出（フォールバック版）
+            同じ座標の壁が複数ある場合は最初に見つかった壁のみを返す（窓の壁の重複選択を防ぐ）
+            """
+            min_distance = float('inf')
+            nearest_wall = None
+            for wall in walls:
+                start_m = wall['start']
+                end_m = wall['end']
+                start_px_x = int((start_m[0] - min_x) * scale) + margin
+                start_px_y = img_height - (int((start_m[1] - min_y) * scale) + margin)
+                end_px_x = int((end_m[0] - min_x) * scale) + margin
+                end_px_y = img_height - (int((end_m[1] - min_y) * scale) + margin)
+                distance = _point_to_line_segment_distance(click_x, click_y, start_px_x, start_px_y, end_px_x, end_px_y)
+                if distance < min_distance:
+                    min_distance = distance
+                    nearest_wall = wall
+            if min_distance <= threshold:
+                return nearest_wall, min_distance
+            else:
+                return None, None
+        
+        def _select_best_wall_pair_from_4(walls):
+            """4本の壁から結合すべき最適な2本を選択（フォールバック版）"""
+            if len(walls) < 2:
+                return None
+            vertical_walls = []
+            horizontal_walls = []
+            for wall in walls:
+                x1, y1 = wall['start']
+                x2, y2 = wall['end']
+                dx = abs(x2 - x1)
+                dy = abs(y2 - y1)
+                if dx < dy:
+                    vertical_walls.append(wall)
+                else:
+                    horizontal_walls.append(wall)
+            dX = float('inf')
+            if len(vertical_walls) >= 2:
+                wall1 = vertical_walls[0]
+                wall2 = vertical_walls[1]
+                avg_x1 = (wall1['start'][0] + wall1['end'][0]) / 2
+                avg_x2 = (wall2['start'][0] + wall2['end'][0]) / 2
+                dX = abs(avg_x1 - avg_x2)
+            dY = float('inf')
+            if len(horizontal_walls) >= 2:
+                wall1 = horizontal_walls[0]
+                wall2 = horizontal_walls[1]
+                avg_y1 = (wall1['start'][1] + wall1['end'][1]) / 2
+                avg_y2 = (wall2['start'][1] + wall2['end'][1]) / 2
+                dY = abs(avg_y1 - avg_y2)
+            if dX == float('inf') and dY == float('inf'):
+                return None
+            if dX < dY:
+                return vertical_walls[:2] if len(vertical_walls) >= 2 else None
+            else:
+                return horizontal_walls[:2] if len(horizontal_walls) >= 2 else None
+        
+        def _find_collinear_chains(walls_in_selection, distance_threshold=0.3, angle_threshold=15):
+            """一直線上に並んだ連結壁線のチェーンを検出（フォールバック版）"""
+            if len(walls_in_selection) < 2:
+                return []
+            connections = {}
+            for i, wall1 in enumerate(walls_in_selection):
+                wall1_id = wall1['id']
+                if wall1_id not in connections:
+                    connections[wall1_id] = []
+                for j, wall2 in enumerate(walls_in_selection):
+                    if i >= j:
+                        continue
+                    wall2_id = wall2['id']
+                    if wall2_id not in connections:
+                        connections[wall2_id] = []
+                    angle_diff = _calc_angle_diff(wall1, wall2)
+                    if angle_diff >= angle_threshold:
+                        continue
+                    endpoint_pairs = [
+                        (wall1['end'], wall2['start'], 'end-start'),
+                        (wall1['end'], wall2['end'], 'end-end'),
+                        (wall1['start'], wall2['start'], 'start-start'),
+                        (wall1['start'], wall2['end'], 'start-end'),
+                    ]
+                    for p1, p2, connection_type in endpoint_pairs:
+                        distance = _calc_distance(p1, p2)
+                        if distance < distance_threshold:
+                            connections[wall1_id].append((wall2_id, connection_type, distance))
+                            reverse_type = connection_type.split('-')[::-1]
+                            reverse_type = f"{reverse_type[0]}-{reverse_type[1]}"
+                            connections[wall2_id].append((wall1_id, reverse_type, distance))
+                            break
+            visited = set()
+            chains = []
+            def build_chain(start_wall_id, current_chain, visited_in_chain):
+                if start_wall_id in visited_in_chain:
+                    return
+                visited_in_chain.add(start_wall_id)
+                current_chain.append(start_wall_id)
+                if start_wall_id in connections:
+                    for connected_id, conn_type, dist in connections[start_wall_id]:
+                        if connected_id not in visited_in_chain:
+                            build_chain(connected_id, current_chain, visited_in_chain)
+            for wall in walls_in_selection:
+                wall_id = wall['id']
+                if wall_id not in visited:
+                    chain = []
+                    visited_in_chain = set()
+                    build_chain(wall_id, chain, visited_in_chain)
+                    if len(chain) >= 2:
+                        visited.update(chain)
+                        chain_walls = [w for w in walls_in_selection if w['id'] in chain]
+                        chains.append(chain_walls)
+            return chains
+        
+        def _find_mergeable_walls(walls_in_selection, distance_threshold=0.3, angle_threshold=15):
+            """選択範囲内で結合可能な壁線ペアまたはチェーンを探す（フォールバック版）"""
+            candidates = []
+            chains = _find_collinear_chains(walls_in_selection, distance_threshold, angle_threshold)
+            for chain in chains:
+                if len(chain) >= 2:
+                    first_wall = chain[0]
+                    last_wall = chain[-1]
+                    all_endpoints = [first_wall['start'], first_wall['end'], last_wall['start'], last_wall['end']]
+                    max_dist = 0
+                    chain_start = None
+                    chain_end = None
+                    for i, p1 in enumerate(all_endpoints):
+                        for j, p2 in enumerate(all_endpoints):
+                            if i >= j:
+                                continue
+                            dist = _calc_distance(p1, p2)
+                            if dist > max_dist:
+                                max_dist = dist
+                                chain_start = p1
+                                chain_end = p2
+                    total_angle_diff = 0
+                    for i in range(len(chain) - 1):
+                        total_angle_diff += _calc_angle_diff(chain[i], chain[i+1])
+                    avg_angle_diff = total_angle_diff / (len(chain) - 1) if len(chain) > 1 else 0
+                    candidates.append({
+                        'walls': chain,
+                        'is_chain': True,
+                        'chain_length': len(chain),
+                        'distance': max_dist,
                         'angle_diff': avg_angle_diff,
                         'new_start': chain_start,
                         'new_end': chain_end,
@@ -811,7 +1134,7 @@ def main():
     def _set_workflow_step(n: int, open_3d: bool = False):
         st.session_state.setdefault('debug_log', []).append(f"callback: set_workflow {n} (was {st.session_state.get('workflow_step')})")
         # Require login for protected steps
-        if n >= 2 and not st.session_state.get('user'):
+        if n >= 2 and st.session_state.get('user') is None:
             # If the caller specifically requested opening the 3D expander, allow
             # the viewer to open even for anonymous users, but do not advance
             # the protected workflow step.
@@ -985,7 +1308,7 @@ def main():
                 run = st.button("🚀 変換を実行", type="primary", use_container_width=True, key="step1_run")
             with col_skip:
                 if st.button("⏭️ スキップ", use_container_width=True, key="step1_skip"):
-                    if not st.session_state.get('user'):
+                    if st.session_state.get('user') is None:
                         st.warning("ステップ2はログインが必要です。サイドバーでログインしてください。")
                     else:
                         st.session_state.workflow_step = 2
@@ -1224,211 +1547,209 @@ def main():
 
 
     with st.expander("Step 2：スケール校正", expanded=(st.session_state.workflow_step == 2)):
-        # Gate Step 2 UI behind login: show warning and stop execution when not logged in
-        if not st.session_state.get('user'):
+        # Gate Step 2 UI behind login: show warning and skip internals when not logged in
+        if st.session_state.get('user') is None:
             st.warning("ステップ2はログインが必要です。サイドバーでログインしてください。")
-            st.stop()
-
-        if st.session_state.workflow_step >= 2 and st.session_state.processed:
-            st.divider()
-            st.markdown("## ステップ ②  スケール校正")
+        else:
+            if st.session_state.workflow_step >= 2 and st.session_state.processed:
+                st.divider()
+                st.markdown("## ステップ ②  スケール校正")
             st.info(
                 "基準となる壁を選択して、修正スケール値を入力して実行してください。(一条CAD図面 1マス = 編集画面 2マス推奨)\n\n"
                 "変更ない場合は「スキップして次へ」を選択してください"
             )
 
-            # 壁選択用の簡易編集エリアを即時表示
-            #st.caption("壁線を1回クリックすると赤色にハイライトします。選択しない場合はスキップで次へ進めます。")
+        # 壁選択用の簡易編集エリアを即時表示
+        #st.caption("壁線を1回クリックすると赤色にハイライトします。選択しない場合はスキップで次へ進めます。")
 
-            # 初期化
-            if "selected_wall_for_calibration" not in st.session_state:
-                st.session_state.selected_wall_for_calibration = None
-            if "scale_last_click" not in st.session_state:
-                st.session_state.scale_last_click = None
+        # 初期化
+        if "selected_wall_for_calibration" not in st.session_state:
+            st.session_state.selected_wall_for_calibration = None
+        if "scale_last_click" not in st.session_state:
+            st.session_state.scale_last_click = None
 
-            if st.session_state.viz_bytes:
-                try:
-                    import math
-                    from PIL import ImageDraw
+        if st.session_state.viz_bytes:
+            try:
+                import math
+                from PIL import ImageDraw
 
-                    disp_img, scale_disp, orig_w, orig_h = _prepare_display_from_bytes(
-                        st.session_state.viz_bytes, max_width=DISPLAY_IMAGE_WIDTH
+                disp_img, scale_disp, orig_w, orig_h = _prepare_display_from_bytes(
+                    st.session_state.viz_bytes, max_width=DISPLAY_IMAGE_WIDTH
+                )
+
+                # 壁データ読み込みと座標変換（streamlit_app.pyと同じロジック）
+                json_data = json.loads(st.session_state.json_bytes.decode("utf-8"))
+                walls = json_data.get("walls", [])
+                scale_px = int(st.session_state.viz_scale)
+                margin = 50  # streamlit_app.pyと同じマージン
+                all_x, all_y = [], []
+                for w in walls:
+                    s = w.get("start", [])
+                    e = w.get("end", [])
+                    if len(s) >= 2 and len(e) >= 2:
+                        all_x.extend([s[0], e[0]])
+                        all_y.extend([s[1], e[1]])
+                if all_x and all_y:
+                    min_x, max_x = min(all_x), max(all_x)
+                    min_y, max_y = min(all_y), max(all_y)
+                    # visualization画像のサイズを計算（Y座標反転を考慮）
+                    img_width_calc = int((max_x - min_x) * scale_px) + 2 * margin
+                    img_height_calc = int((max_y - min_y) * scale_px) + 2 * margin
+                else:
+                    min_x = min_y = 0
+                    max_x = max_y = 1
+                    img_width_calc = orig_w
+                    img_height_calc = orig_h
+
+                # オーバーレイ描画用にコピー
+                overlay = disp_img.copy()
+                draw = ImageDraw.Draw(overlay)
+
+                # 選択された壁をハイライト表示
+                target_wall_data = None
+                px_distance = None
+                if st.session_state.selected_wall_for_calibration:
+                    selected_wall = st.session_state.selected_wall_for_calibration
+                    s = selected_wall.get("start", [])
+                    e = selected_wall.get("end", [])
+                    if len(s) >= 2 and len(e) >= 2:
+                        # メートル→ピクセル変換（Y座標反転を考慮）
+                        x1 = int((s[0] - min_x) * scale_px) + margin
+                        y1 = img_height_calc - (int((s[1] - min_y) * scale_px) + margin)
+                        x2 = int((e[0] - min_x) * scale_px) + margin
+                        y2 = img_height_calc - (int((e[1] - min_y) * scale_px) + margin)
+
+                        # 表示座標で赤線を描画
+                        dx1 = int(x1 * scale_disp)
+                        dy1 = int(y1 * scale_disp)
+                        dx2 = int(x2 * scale_disp)
+                        dy2 = int(y2 * scale_disp)
+                        draw.line((dx1, dy1, dx2, dy2), fill=(255, 0, 0), width=4)
+
+                        # 壁データを準備
+                        wall_length_px = math.hypot(x2 - x1, y2 - y1)
+                        target_wall_data = {
+                            'wall': selected_wall,
+                            'id': selected_wall.get('id', '?'),
+                            'length_px': wall_length_px,
+                            'start_m': s,
+                            'end_m': e
+                        }
+                        px_distance = wall_length_px
+
+                    # スケール入力と反映
+                    if px_distance is not None and target_wall_data is not None:
+                        # マス数入力フォーム
+                        default_grid = st.session_state.get("step3_grid_input_val", 1.0)
+                    grid_count = st.number_input(
+                        "この壁は一条工務店CAD図面上で何マス分ですか？ (1マス=0.9m)",
+                        min_value=0.1,
+                        max_value=100.0,
+                        value=float(default_grid),
+                        step=0.1,
+                        key="step3_grid_input"
                     )
-
-                    # 壁データ読み込みと座標変換（streamlit_app.pyと同じロジック）
-                    json_data = json.loads(st.session_state.json_bytes.decode("utf-8"))
-                    walls = json_data.get("walls", [])
-                    scale_px = int(st.session_state.viz_scale)
-                    margin = 50  # streamlit_app.pyと同じマージン
-                    all_x, all_y = [], []
-                    for w in walls:
-                        s = w.get("start", [])
-                        e = w.get("end", [])
-                        if len(s) >= 2 and len(e) >= 2:
-                            all_x.extend([s[0], e[0]])
-                            all_y.extend([s[1], e[1]])
-                    if all_x and all_y:
-                        min_x, max_x = min(all_x), max(all_x)
-                        min_y, max_y = min(all_y), max(all_y)
-                        # visualization画像のサイズを計算（Y座標反転を考慮）
-                        img_width_calc = int((max_x - min_x) * scale_px) + 2 * margin
-                        img_height_calc = int((max_y - min_y) * scale_px) + 2 * margin
-                    else:
-                        min_x = min_y = 0
-                        max_x = max_y = 1
-                        img_width_calc = orig_w
-                        img_height_calc = orig_h
-
-                    # オーバーレイ描画用にコピー
-                    overlay = disp_img.copy()
-                    draw = ImageDraw.Draw(overlay)
-
-                    # 選択された壁をハイライト表示
-                    target_wall_data = None
-                    px_distance = None
-                    if st.session_state.selected_wall_for_calibration:
-                        selected_wall = st.session_state.selected_wall_for_calibration
-                        s = selected_wall.get("start", [])
-                        e = selected_wall.get("end", [])
-                        if len(s) >= 2 and len(e) >= 2:
-                            # メートル→ピクセル変換（Y座標反転を考慮）
-                            x1 = int((s[0] - min_x) * scale_px) + margin
-                            y1 = img_height_calc - (int((s[1] - min_y) * scale_px) + margin)
-                            x2 = int((e[0] - min_x) * scale_px) + margin
-                            y2 = img_height_calc - (int((e[1] - min_y) * scale_px) + margin)
-
-                            # 表示座標で赤線を描画
-                            dx1 = int(x1 * scale_disp)
-                            dy1 = int(y1 * scale_disp)
-                            dx2 = int(x2 * scale_disp)
-                            dy2 = int(y2 * scale_disp)
-                            draw.line((dx1, dy1, dx2, dy2), fill=(255, 0, 0), width=4)
-
-                            # 壁データを準備
-                            wall_length_px = math.hypot(x2 - x1, y2 - y1)
-                            target_wall_data = {
-                                'wall': selected_wall,
-                                'id': selected_wall.get('id', '?'),
-                                'length_px': wall_length_px,
-                                'start_m': s,
-                                'end_m': e
-                            }
-                            px_distance = wall_length_px
-
-                        # スケール入力と反映
-                        if px_distance is not None and target_wall_data is not None:
-                            # マス数入力フォーム
-                            default_grid = st.session_state.get("step3_grid_input_val", 1.0)
-                        grid_count = st.number_input(
-                            "この壁は一条工務店CAD図面上で何マス分ですか？ (1マス=0.9m)",
-                            min_value=0.1,
-                            max_value=100.0,
-                            value=float(default_grid),
-                            step=0.1,
-                            key="step3_grid_input"
-                        )
-                        st.session_state.step3_grid_input_val = grid_count
-                        
-                        if st.button("💾 このスケールで更新", type="primary", use_container_width=True, key="step3_apply_scale"):
-                            # 強制的にログインを要求（未ログインなら処理しない）
-                            if not st.session_state.get('user'):
-                                st.warning("この操作はログインが必要です。サイドバーでログインしてください。")
+                    st.session_state.step3_grid_input_val = grid_count
+                    
+                    if st.button("💾 このスケールで更新", type="primary", use_container_width=True, key="step3_apply_scale"):
+                        try:
+                            # 実測距離（メートル単位）
+                            actual_distance_m = grid_count * 0.9  # 1マス = 0.9m = 90cm
+                            
+                            # 現在の壁の長さ（メートル単位）を取得
+                            current_length_m = target_wall_data['wall'].get('length')
+                            if current_length_m is None:
+                                dx_m = target_wall_data['end_m'][0] - target_wall_data['start_m'][0]
+                                dy_m = target_wall_data['end_m'][1] - target_wall_data['start_m'][1]
+                                current_length_m = math.sqrt(dx_m**2 + dy_m**2)
+                            
+                            if current_length_m <= 0:
+                                st.error("❌ 現在の壁長が0mのため再計算できません。別の壁で試してください。")
                             else:
-                                try:
-                                    # 実測距離（メートル単位）
-                                    actual_distance_m = grid_count * 0.9  # 1マス = 0.9m = 90cm
-                                    
-                                    # 現在の壁の長さ（メートル単位）を取得
-                                    current_length_m = target_wall_data['wall'].get('length')
-                                    if current_length_m is None:
-                                        dx_m = target_wall_data['end_m'][0] - target_wall_data['start_m'][0]
-                                        dy_m = target_wall_data['end_m'][1] - target_wall_data['start_m'][1]
-                                        current_length_m = math.sqrt(dx_m**2 + dy_m**2)
-                                    
-                                    if current_length_m <= 0:
-                                        st.error("❌ 現在の壁長が0mのため再計算できません。別の壁で試してください。")
-                                    else:
-                                        # スケール比率を計算（実測/現在）
-                                        scale_ratio = actual_distance_m / current_length_m
+                                # スケール比率を計算（実測/現在）
+                                scale_ratio = actual_distance_m / current_length_m
+                                
+                                # 現在のJSONを読み込み
+                                import copy
+                                out_dir = Path(st.session_state.out_dir)
+                                json_path = out_dir / st.session_state.json_name
+                                json_data = json.loads(st.session_state.json_bytes.decode("utf-8"))
+                                old_pixel_to_meter = json_data.get("metadata", {}).get("pixel_to_meter", 0.005) or 0.005
+                                
+                                # 新しいpixel_to_meterを計算
+                                new_pixel_to_meter = old_pixel_to_meter * scale_ratio
+                                
+                                # 各壁の座標をスケール変換
+                                calibrated_json = copy.deepcopy(json_data)
+                                for wall in calibrated_json.get("walls", []):
+                                    if "start" in wall and "end" in wall:
+                                        # 座標をスケール変換（X-Y平面のみ）
+                                        wall["start"] = [round(wall["start"][0] * scale_ratio, 3),
+                                                       round(wall["start"][1] * scale_ratio, 3)]
+                                        wall["end"] = [round(wall["end"][0] * scale_ratio, 3),
+                                                     round(wall["end"][1] * scale_ratio, 3)]
+                                        # 長さを再計算（X-Y平面の長さ）
+                                        dx = wall["end"][0] - wall["start"][0]
+                                        dy = wall["end"][1] - wall["start"][1]
+                                        wall["length"] = round(math.sqrt(dx**2 + dy**2), 3)
                                         
-                                        # 現在のJSONを読み込み
-                                        import copy
-                                        out_dir = Path(st.session_state.out_dir)
-                                        json_path = out_dir / st.session_state.json_name
-                                        json_data = json.loads(st.session_state.json_bytes.decode("utf-8"))
-                                        old_pixel_to_meter = json_data.get("metadata", {}).get("pixel_to_meter", 0.005) or 0.005
+                                        # 高さは2.4m固定（スケール変換しない）
+                                        # 一条工務店の標準天井高は2.4mで固定
+                                        if "height" not in wall or wall.get("height") != 2.4:
+                                            wall["height"] = 2.4
                                         
-                                        # 新しいpixel_to_meterを計算
-                                        new_pixel_to_meter = old_pixel_to_meter * scale_ratio
-                                        
-                                        # 各壁の座標をスケール変換
-                                        calibrated_json = copy.deepcopy(json_data)
-                                        for wall in calibrated_json.get("walls", []):
-                                            if "start" in wall and "end" in wall:
-                                                # 座標をスケール変換（X-Y平面のみ）
-                                                wall["start"] = [round(wall["start"][0] * scale_ratio, 3),
-                                                               round(wall["start"][1] * scale_ratio, 3)]
-                                                wall["end"] = [round(wall["end"][0] * scale_ratio, 3),
-                                                             round(wall["end"][1] * scale_ratio, 3)]
-                                                # 長さを再計算（X-Y平面の長さ）
-                                                dx = wall["end"][0] - wall["start"][0]
-                                                dy = wall["end"][1] - wall["start"][1]
-                                                wall["length"] = round(math.sqrt(dx**2 + dy**2), 3)
-                                                
-                                                # 高さは2.4m固定（スケール変換しない）
-                                                # 一条工務店の標準天井高は2.4mで固定
-                                                if "height" not in wall or wall.get("height") != 2.4:
-                                                    wall["height"] = 2.4
-                                                
-                                                # 厚さは10cm固定（スケール変換しない）
-                                                # 一条工務店の標準壁厚は10cmで固定
-                                                wall["thickness"] = 0.1
-                                        
-                                        # メタデータを更新
-                                        calibrated_json.setdefault("metadata", {})["pixel_to_meter"] = new_pixel_to_meter
-                                        
-                                        # デバッグ情報：校正後の座標範囲を計算
-                                        all_x_after = []
-                                        all_y_after = []
-                                        for w in calibrated_json.get("walls", []):
-                                            if "start" in w and "end" in w:
-                                                all_x_after.extend([w["start"][0], w["end"][0]])
-                                                all_y_after.extend([w["start"][1], w["end"][1]])
-                                        
-                                        if all_x_after and all_y_after:
-                                            min_x_after, max_x_after = min(all_x_after), max(all_x_after)
-                                            min_y_after, max_y_after = min(all_y_after), max(all_y_after)
-                                            width_after = max_x_after - min_x_after
-                                            height_after = max_y_after - min_y_after
-                                        
-                                        # 保存と再可視化
-                                        json_path.write_text(json.dumps(calibrated_json, indent=2, ensure_ascii=False))
-                                        st.session_state.json_bytes = json_path.read_bytes()
-                                        viz_path = out_dir / st.session_state.viz_name
-                                        visualize_3d_walls(
-                                            str(json_path),
-                                            str(viz_path),
-                                            scale=int(st.session_state.viz_scale),
-                                            wall_color=(0, 0, 0),
-                                            bg_color=(255, 255, 255)
-                                        )
-                                        if viz_path.exists():
-                                            st.session_state.viz_bytes = viz_path.read_bytes()
+                                        # 厚さは10cm固定（スケール変換しない）
+                                        # 一条工務店の標準壁厚は10cmで固定
+                                        wall["thickness"] = 0.1
+                                
+                                # メタデータを更新
+                                calibrated_json.setdefault("metadata", {})["pixel_to_meter"] = new_pixel_to_meter
+                                
+                                # デバッグ情報：校正後の座標範囲を計算
+                                all_x_after = []
+                                all_y_after = []
+                                for w in calibrated_json.get("walls", []):
+                                    if "start" in w and "end" in w:
+                                        all_x_after.extend([w["start"][0], w["end"][0]])
+                                        all_y_after.extend([w["start"][1], w["end"][1]])
+                                
+                                if all_x_after and all_y_after:
+                                    min_x_after, max_x_after = min(all_x_after), max(all_x_after)
+                                    min_y_after, max_y_after = min(all_y_after), max(all_y_after)
+                                    width_after = max_x_after - min_x_after
+                                    height_after = max_y_after - min_y_after
+                                
+                                # 保存と再可視化
+                                json_path.write_text(json.dumps(calibrated_json, indent=2, ensure_ascii=False))
+                                st.session_state.json_bytes = json_path.read_bytes()
+                                viz_path = out_dir / st.session_state.viz_name
+                                visualize_3d_walls(
+                                    str(json_path),
+                                    str(viz_path),
+                                    scale=int(st.session_state.viz_scale),
+                                    wall_color=(0, 0, 0),
+                                    bg_color=(255, 255, 255)
+                                )
+                                if viz_path.exists():
+                                    st.session_state.viz_bytes = viz_path.read_bytes()
 
-                                        # 後続用に状態更新
-                                        st.session_state.scale_calibration_done = True
-                                        st.session_state.selected_wall_for_calibration = None
-                                        st.session_state.scale_last_click = None
-                                        st.session_state.step3_grid_input_val = grid_count
-                                        # 3D表示を開く
-                                        st.session_state.open_3d_expander = True
-                                        # 手動編集へ遷移
-                                        st.session_state.workflow_step = 3
-                                        st.rerun()
-                                except Exception as e:
-                                    st.error(f"❌ スケール更新でエラーが発生しました: {e}")
-                                    import traceback
-                                    st.code(traceback.format_exc())
+                                # 後続用に状態更新
+                                st.session_state.scale_calibration_done = True
+                                st.session_state.selected_wall_for_calibration = None
+                                st.session_state.scale_last_click = None
+                                st.session_state.step3_grid_input_val = grid_count
+                                # 3D表示を開く
+                                st.session_state.open_3d_expander = True
+                                # 手動編集へ遷移
+                                if st.session_state.get('user') is None:
+                                    st.warning("ステップ3はログインが必要です。サイドバーでログインしてください。")
+                                else:
+                                    st.session_state.workflow_step = 3
+                                    st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ スケール更新でエラーが発生しました: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
 
                 # ズームコントロール（ステップ2）
                 if 'editor_zoom_level' not in st.session_state:
@@ -1535,13 +1856,12 @@ def main():
                 # スケール適用済みの案内（遷移は適用時に実施済み）
                 if st.session_state.get("scale_calibration_done"):
                     st.success("スケールを適用しました。手動編集に進んでください。")
-                
             except Exception as e:
                 st.error(f"スケール校正ビュー表示エラー: {e}")
             
             # スキップして次へボタンを最後に配置
             if st.button("⏭️ スキップして次へ", use_container_width=True, key="step3_skip"):
-                if not st.session_state.get('user'):
+                if st.session_state.get('user') is None:
                     st.warning("ステップ3はログインが必要です。サイドバーでログインしてください。")
                 else:
                     st.session_state.workflow_step = 3
@@ -1549,14 +1869,13 @@ def main():
                     st.rerun()
     # ============= ステップ3: 手動編集 =============
     with st.expander("Step 3：手動編集", expanded=(st.session_state.workflow_step == 3)):
-        # Gate Step 3 UI behind login: show warning and stop execution when not logged in
-        if not st.session_state.get('user'):
+        # Gate Step 3 UI behind login: show warning and skip internals when not logged in
+        if st.session_state.get('user') is None:
             st.warning("ステップ3はログインが必要です。サイドバーでログインしてください。")
-            st.stop()
-
-        if st.session_state.workflow_step >= 3 and st.session_state.processed:
-            st.divider()
-            st.markdown("## ステップ ③ 手動編集")
+        else:
+            if st.session_state.workflow_step >= 3 and st.session_state.processed:
+                st.divider()
+                st.markdown("## ステップ ③ 手動編集")
         # --- 自動結合の現在値表示と再実行ボタン ---
         # 自動結合の手動操作UIは不要のため削除しました。
         # 固定パラメータを使用します: merge_radius=55px, merge_angle=15°
@@ -2528,15 +2847,12 @@ def main():
                         # 結合実行ボタン（選択完了メッセージの直後、画像の前に表示）
                         st.markdown("---")
                         if st.button("🔗 結合実行", type="primary", key="btn_merge_exec_top"):
-                            if not st.session_state.get('user'):
-                                st.warning("この操作はログインが必要です。サイドバーでログインしてください。")
-                            else:
-                                # 選択された壁をセッションに保存してから選択リストをクリア
-                                st.session_state.merge_walls_to_process = list(st.session_state.selected_walls_for_merge)
-                                st.session_state.selected_walls_for_merge = []
-                                st.session_state.skip_click_processing = True  # クリック処理をスキップ
-                                # 即座にrerunして選択状態をクリア（次のrerunで実際の処理を実行）
-                                st.rerun()
+                            # 選択された壁をセッションに保存してから選択リストをクリア
+                            st.session_state.merge_walls_to_process = list(st.session_state.selected_walls_for_merge)
+                            st.session_state.selected_walls_for_merge = []
+                            st.session_state.skip_click_processing = True  # クリック処理をスキップ
+                            # 即座にrerunして選択状態をクリア（次のrerunで実際の処理を実行）
+                            st.rerun()
                 elif edit_mode == "窓を追加":
                     # 窓追加モード：壁線クリック選択（2本ずつペアで複数窓追加可能）
                     num_selected = len(st.session_state.selected_walls_for_window)
@@ -2631,16 +2947,13 @@ def main():
                         
                         # 実行ボタンを表示
                         if st.button("🪟 窓追加実行", type="primary", key="btn_window_exec_top"):
-                            if st.session_state.get('user') is None:
-                                st.warning("この操作はログインが必要です。サイドバーでログインしてください。")
-                            else:
-                                # 選択された壁とパラメータをセッションに保存してから選択リストをクリア
-                                st.session_state.window_walls_to_process = list(st.session_state.selected_walls_for_window)
-                                st.session_state.window_click_params_list_to_process = window_params_to_save
-                                st.session_state.selected_walls_for_window = []
-                                st.session_state.skip_click_processing = True  # クリック処理をスキップ
-                                # 即座にrerunして選択状態をクリア（次のrerunで実際の処理を実行）
-                                st.rerun()
+                            # 選択された壁とパラメータをセッションに保存してから選択リストをクリア
+                            st.session_state.window_walls_to_process = list(st.session_state.selected_walls_for_window)
+                            st.session_state.window_click_params_list_to_process = window_params_to_save
+                            st.session_state.selected_walls_for_window = []
+                            st.session_state.skip_click_processing = True  # クリック処理をスキップ
+                            # 即座にrerunして選択状態をクリア（次のrerunで実際の処理を実行）
+                            st.rerun()
                 elif edit_mode == "線を削除":
                     # 線削除モード：壁線クリック選択（複数本可能）
                     num_selected = len(st.session_state.selected_walls_for_delete)
@@ -2653,15 +2966,12 @@ def main():
                         # 削除実行ボタン（選択完了メッセージの直後、画像の前に表示）
                         st.markdown("---")
                         if st.button("🗑️ 削除実行", type="primary", key="btn_delete_exec_top"):
-                            if st.session_state.get('user') is None:
-                                st.warning("この操作はログインが必要です。サイドバーでログインしてください。")
-                            else:
-                                # 選択された壁をセッションに保存してから選択リストをクリア
-                                st.session_state.delete_walls_to_process = list(st.session_state.selected_walls_for_delete)
-                                st.session_state.selected_walls_for_delete = []
-                                st.session_state.skip_click_processing = True  # クリック処理をスキップ
-                                # 即座にrerunして選択状態をクリア（次のrerunで実際の処理を実行）
-                                st.rerun()
+                            # 選択された壁をセッションに保存してから選択リストをクリア
+                            st.session_state.delete_walls_to_process = list(st.session_state.selected_walls_for_delete)
+                            st.session_state.selected_walls_for_delete = []
+                            st.session_state.skip_click_processing = True  # クリック処理をスキップ
+                            # 即座にrerunして選択状態をクリア（次のrerunで実際の処理を実行）
+                            st.rerun()
                 elif edit_mode == "階段を配置":
                     # 階段追加モード：2点選択
                     if len(st.session_state.rect_coords_list) > 0:
@@ -2696,9 +3006,6 @@ def main():
                         
                         # 階段配置実行ボタン
                         if st.button("🪜 階段配置実行", type="primary", key="stair_exec"):
-                            if st.session_state.get('user') is None:
-                                st.warning("この操作はログインが必要です。サイドバーでログインしてください。")
-                            else:
                             st.session_state.execute_stair_placement = True
                             st.session_state.selected_stair_pattern = stair_pattern_key
                             st.rerun()
@@ -2718,9 +3025,6 @@ def main():
                         # 線追加実行ボタン（選択完了メッセージの直後、画像の前に表示）
                         st.markdown("---")
                         if st.button("➕ 線追加実行", type="primary", key="btn_add_line_exec_top"):
-                            if st.session_state.get('user') is None:
-                                st.warning("この操作はログインが必要です。サイドバーでログインしてください。")
-                            else:
                             # 実行フラグを立てて処理実行
                             st.session_state.add_line_execute = True
                             st.rerun()
@@ -2799,9 +3103,6 @@ def main():
                             #st.success(f"📐 配置サイズ: 幅{width*100:.0f}cm × 奥行き{depth*100:.0f}cm × 高さ{selected_height*100:.0f}cm")
                         
                         if st.button("🪑 オブジェクト配置実行", type="primary", key="furniture_exec"):
-                            if st.session_state.get('user') is None:
-                                st.warning("この操作はログインが必要です。サイドバーでログインしてください。")
-                            else:
                             st.session_state.execute_furniture_placement = True
                             st.rerun()
                     
@@ -3487,9 +3788,6 @@ def main():
                                               f"({(st.session_state.window_params_list[idx]['height_mm'] + st.session_state.window_params_list[idx]['base_mm'])/1000:.3f}m)")
                             
                             if st.button("🪟 窓追加実行", type="primary", key="window_batch_exec"):
-                                if st.session_state.get('user') is None:
-                                    st.warning("この操作はログインが必要です。サイドバーでログインしてください。")
-                                else:
                                 st.session_state.execute_window_batch = True
                                 st.rerun()
                     else:

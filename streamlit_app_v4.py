@@ -5494,23 +5494,23 @@ def main():
     
     # ============= フッター（全ステップ共通） =============
     st.divider()
-        # 常時確認できるデバッグログ（画面下部）
-        with st.expander("🔍 デバッグログ (最新)", expanded=False):
-            try:
-                dbg = st.session_state.get('debug_log', [])
-                dbg_ts = st.session_state.get('debug_logs', [])
-                if dbg_ts:
-                    st.markdown("**タイムスタンプ付きログ**")
-                    for line in dbg_ts[-40:]:
-                        st.text(line)
-                if dbg:
-                    st.markdown("**internal debug_log**")
-                    for line in dbg[-40:]:
-                        st.text(line)
-                if not dbg and not dbg_ts:
-                    st.write("(ログはまだありません)")
-            except Exception as e:
-                st.write(f"ログ表示エラー: {e}")
+    # 常時確認できるデバッグログ（画面下部）
+    with st.expander("🔍 デバッグログ (最新)", expanded=False):
+        try:
+            dbg = st.session_state.get('debug_log', [])
+            dbg_ts = st.session_state.get('debug_logs', [])
+            if dbg_ts:
+                st.markdown("**タイムスタンプ付きログ**")
+                for line in dbg_ts[-40:]:
+                    st.text(line)
+            if dbg:
+                st.markdown("**internal debug_log**")
+                for line in dbg[-40:]:
+                    st.text(line)
+            if not dbg and not dbg_ts:
+                st.write("(ログはまだありません)")
+        except Exception as e:
+            st.write(f"ログ表示エラー: {e}")
     with st.expander("📋 利用規約", expanded=False):
         st.markdown("""
         ## 利用規約

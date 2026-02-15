@@ -1547,7 +1547,7 @@ def main():
 
 
     with st.expander("Step 2：スケール校正", expanded=(st.session_state.workflow_step == 2)):
-        # Gate Step 2 UI behind login: show warning and skip internals when not logged in
+        # Gate Step 2 UI behind login: show warning and display internals only when logged in
         if st.session_state.get('user') is None:
             st.warning("ステップ2はログインが必要です。サイドバーでログインしてください。")
         else:
@@ -1559,319 +1559,320 @@ def main():
                 "変更ない場合は「スキップして次へ」を選択してください"
             )
 
-        # 壁選択用の簡易編集エリアを即時表示
-        #st.caption("壁線を1回クリックすると赤色にハイライトします。選択しない場合はスキップで次へ進めます。")
+            # 壁選択用の簡易編集エリアを即時表示
+            #st.caption("壁線を1回クリックすると赤色にハイライトします。選択しない場合はスキップで次へ進めます。")
 
-        # 初期化
-        if "selected_wall_for_calibration" not in st.session_state:
-            st.session_state.selected_wall_for_calibration = None
-        if "scale_last_click" not in st.session_state:
-            st.session_state.scale_last_click = None
+            # 初期化
+            if "selected_wall_for_calibration" not in st.session_state:
+                st.session_state.selected_wall_for_calibration = None
+            if "scale_last_click" not in st.session_state:
+                st.session_state.scale_last_click = None
 
-        if st.session_state.viz_bytes:
-            try:
-                import math
-                from PIL import ImageDraw
+            if st.session_state.viz_bytes:
+                try:
+                    import math
+                    from PIL import ImageDraw
 
-                disp_img, scale_disp, orig_w, orig_h = _prepare_display_from_bytes(
-                    st.session_state.viz_bytes, max_width=DISPLAY_IMAGE_WIDTH
-                )
-
-                # 壁データ読み込みと座標変換（streamlit_app.pyと同じロジック）
-                json_data = json.loads(st.session_state.json_bytes.decode("utf-8"))
-                walls = json_data.get("walls", [])
-                scale_px = int(st.session_state.viz_scale)
-                margin = 50  # streamlit_app.pyと同じマージン
-                all_x, all_y = [], []
-                for w in walls:
-                    s = w.get("start", [])
-                    e = w.get("end", [])
-                    if len(s) >= 2 and len(e) >= 2:
-                        all_x.extend([s[0], e[0]])
-                        all_y.extend([s[1], e[1]])
-                if all_x and all_y:
-                    min_x, max_x = min(all_x), max(all_x)
-                    min_y, max_y = min(all_y), max(all_y)
-                    # visualization画像のサイズを計算（Y座標反転を考慮）
-                    img_width_calc = int((max_x - min_x) * scale_px) + 2 * margin
-                    img_height_calc = int((max_y - min_y) * scale_px) + 2 * margin
-                else:
-                    min_x = min_y = 0
-                    max_x = max_y = 1
-                    img_width_calc = orig_w
-                    img_height_calc = orig_h
-
-                # オーバーレイ描画用にコピー
-                overlay = disp_img.copy()
-                draw = ImageDraw.Draw(overlay)
-
-                # 選択された壁をハイライト表示
-                target_wall_data = None
-                px_distance = None
-                if st.session_state.selected_wall_for_calibration:
-                    selected_wall = st.session_state.selected_wall_for_calibration
-                    s = selected_wall.get("start", [])
-                    e = selected_wall.get("end", [])
-                    if len(s) >= 2 and len(e) >= 2:
-                        # メートル→ピクセル変換（Y座標反転を考慮）
-                        x1 = int((s[0] - min_x) * scale_px) + margin
-                        y1 = img_height_calc - (int((s[1] - min_y) * scale_px) + margin)
-                        x2 = int((e[0] - min_x) * scale_px) + margin
-                        y2 = img_height_calc - (int((e[1] - min_y) * scale_px) + margin)
-
-                        # 表示座標で赤線を描画
-                        dx1 = int(x1 * scale_disp)
-                        dy1 = int(y1 * scale_disp)
-                        dx2 = int(x2 * scale_disp)
-                        dy2 = int(y2 * scale_disp)
-                        draw.line((dx1, dy1, dx2, dy2), fill=(255, 0, 0), width=4)
-
-                        # 壁データを準備
-                        wall_length_px = math.hypot(x2 - x1, y2 - y1)
-                        target_wall_data = {
-                            'wall': selected_wall,
-                            'id': selected_wall.get('id', '?'),
-                            'length_px': wall_length_px,
-                            'start_m': s,
-                            'end_m': e
-                        }
-                        px_distance = wall_length_px
-
-                    # スケール入力と反映
-                    if px_distance is not None and target_wall_data is not None:
-                        # マス数入力フォーム
-                        default_grid = st.session_state.get("step3_grid_input_val", 1.0)
-                    grid_count = st.number_input(
-                        "この壁は一条工務店CAD図面上で何マス分ですか？ (1マス=0.9m)",
-                        min_value=0.1,
-                        max_value=100.0,
-                        value=float(default_grid),
-                        step=0.1,
-                        key="step3_grid_input"
+                    disp_img, scale_disp, orig_w, orig_h = _prepare_display_from_bytes(
+                        st.session_state.viz_bytes, max_width=DISPLAY_IMAGE_WIDTH
                     )
-                    st.session_state.step3_grid_input_val = grid_count
-                    
-                    if st.button("💾 このスケールで更新", type="primary", use_container_width=True, key="step3_apply_scale"):
-                        try:
-                            # 実測距離（メートル単位）
-                            actual_distance_m = grid_count * 0.9  # 1マス = 0.9m = 90cm
-                            
-                            # 現在の壁の長さ（メートル単位）を取得
-                            current_length_m = target_wall_data['wall'].get('length')
-                            if current_length_m is None:
-                                dx_m = target_wall_data['end_m'][0] - target_wall_data['start_m'][0]
-                                dy_m = target_wall_data['end_m'][1] - target_wall_data['start_m'][1]
-                                current_length_m = math.sqrt(dx_m**2 + dy_m**2)
-                            
-                            if current_length_m <= 0:
-                                st.error("❌ 現在の壁長が0mのため再計算できません。別の壁で試してください。")
-                            else:
-                                # スケール比率を計算（実測/現在）
-                                scale_ratio = actual_distance_m / current_length_m
-                                
-                                # 現在のJSONを読み込み
-                                import copy
-                                out_dir = Path(st.session_state.out_dir)
-                                json_path = out_dir / st.session_state.json_name
-                                json_data = json.loads(st.session_state.json_bytes.decode("utf-8"))
-                                old_pixel_to_meter = json_data.get("metadata", {}).get("pixel_to_meter", 0.005) or 0.005
-                                
-                                # 新しいpixel_to_meterを計算
-                                new_pixel_to_meter = old_pixel_to_meter * scale_ratio
-                                
-                                # 各壁の座標をスケール変換
-                                calibrated_json = copy.deepcopy(json_data)
-                                for wall in calibrated_json.get("walls", []):
-                                    if "start" in wall and "end" in wall:
-                                        # 座標をスケール変換（X-Y平面のみ）
-                                        wall["start"] = [round(wall["start"][0] * scale_ratio, 3),
-                                                       round(wall["start"][1] * scale_ratio, 3)]
-                                        wall["end"] = [round(wall["end"][0] * scale_ratio, 3),
-                                                     round(wall["end"][1] * scale_ratio, 3)]
-                                        # 長さを再計算（X-Y平面の長さ）
-                                        dx = wall["end"][0] - wall["start"][0]
-                                        dy = wall["end"][1] - wall["start"][1]
-                                        wall["length"] = round(math.sqrt(dx**2 + dy**2), 3)
-                                        
-                                        # 高さは2.4m固定（スケール変換しない）
-                                        # 一条工務店の標準天井高は2.4mで固定
-                                        if "height" not in wall or wall.get("height") != 2.4:
-                                            wall["height"] = 2.4
-                                        
-                                        # 厚さは10cm固定（スケール変換しない）
-                                        # 一条工務店の標準壁厚は10cmで固定
-                                        wall["thickness"] = 0.1
-                                
-                                # メタデータを更新
-                                calibrated_json.setdefault("metadata", {})["pixel_to_meter"] = new_pixel_to_meter
-                                
-                                # デバッグ情報：校正後の座標範囲を計算
-                                all_x_after = []
-                                all_y_after = []
-                                for w in calibrated_json.get("walls", []):
-                                    if "start" in w and "end" in w:
-                                        all_x_after.extend([w["start"][0], w["end"][0]])
-                                        all_y_after.extend([w["start"][1], w["end"][1]])
-                                
-                                if all_x_after and all_y_after:
-                                    min_x_after, max_x_after = min(all_x_after), max(all_x_after)
-                                    min_y_after, max_y_after = min(all_y_after), max(all_y_after)
-                                    width_after = max_x_after - min_x_after
-                                    height_after = max_y_after - min_y_after
-                                
-                                # 保存と再可視化
-                                json_path.write_text(json.dumps(calibrated_json, indent=2, ensure_ascii=False))
-                                st.session_state.json_bytes = json_path.read_bytes()
-                                viz_path = out_dir / st.session_state.viz_name
-                                visualize_3d_walls(
-                                    str(json_path),
-                                    str(viz_path),
-                                    scale=int(st.session_state.viz_scale),
-                                    wall_color=(0, 0, 0),
-                                    bg_color=(255, 255, 255)
-                                )
-                                if viz_path.exists():
-                                    st.session_state.viz_bytes = viz_path.read_bytes()
 
-                                # 後続用に状態更新
-                                st.session_state.scale_calibration_done = True
-                                st.session_state.selected_wall_for_calibration = None
-                                st.session_state.scale_last_click = None
-                                st.session_state.step3_grid_input_val = grid_count
-                                # 3D表示を開く
-                                st.session_state.open_3d_expander = True
-                                # 手動編集へ遷移
-                                if st.session_state.get('user') is None:
-                                    st.warning("ステップ3はログインが必要です。サイドバーでログインしてください。")
-                                else:
-                                    st.session_state.workflow_step = 3
-                                    st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ スケール更新でエラーが発生しました: {e}")
-                            import traceback
-                            st.code(traceback.format_exc())
+                    # 壁データ読み込みと座標変換（streamlit_app.pyと同じロジック）
+                    json_data = json.loads(st.session_state.json_bytes.decode("utf-8"))
+                    walls = json_data.get("walls", [])
+                    scale_px = int(st.session_state.viz_scale)
+                    margin = 50  # streamlit_app.pyと同じマージン
+                    all_x, all_y = [], []
+                    for w in walls:
+                        s = w.get("start", [])
+                        e = w.get("end", [])
+                        if len(s) >= 2 and len(e) >= 2:
+                            all_x.extend([s[0], e[0]])
+                            all_y.extend([s[1], e[1]])
+                    if all_x and all_y:
+                        min_x, max_x = min(all_x), max(all_x)
+                        min_y, max_y = min(all_y), max(all_y)
+                        # visualization画像のサイズを計算（Y座標反転を考慮）
+                        img_width_calc = int((max_x - min_x) * scale_px) + 2 * margin
+                        img_height_calc = int((max_y - min_y) * scale_px) + 2 * margin
+                    else:
+                        min_x = min_y = 0
+                        max_x = max_y = 1
+                        img_width_calc = orig_w
+                        img_height_calc = orig_h
 
-                # ズームコントロール（ステップ2）
-                if 'editor_zoom_level' not in st.session_state:
-                    st.session_state.editor_zoom_level = 1.0
-                
-                col_zoom_label, col_zoom1, col_zoom2, col_zoom_space = st.columns([3, 1, 1, 7])
-                with col_zoom_label:
-                    st.markdown(f"表示サイズ調整: {st.session_state.editor_zoom_level*100:.0f}%")
-                with col_zoom1:
-                    if st.button("🔍−", key="step2_zoom_out"):
-                        st.session_state.editor_zoom_level = max(0.2, st.session_state.editor_zoom_level - 0.2)
-                        st.rerun()
-                with col_zoom2:
-                    if st.button("🔍+", key="step2_zoom_in"):
-                        st.session_state.editor_zoom_level = min(1.6, st.session_state.editor_zoom_level + 0.2)
-                        st.rerun()
-                
-                
-                # ズーム適用
-                zoom_level = st.session_state.get('editor_zoom_level', 1.0)
-                if zoom_level != 1.0:
-                    w, h = overlay.size
-                    overlay_resized = overlay.resize(
-                        (int(w * zoom_level), int(h * zoom_level)),
-                        Image.Resampling.LANCZOS
-                    )
-                else:
-                    overlay_resized = overlay
-                
-                # 画像データの検証（表示エラー対策 - ステップ3と同じロジック）
-                if overlay_resized is None:
-                    st.warning("⚠️ 画像データを再生成しています...")
-                    st.rerun()
-                
-                if overlay_resized.size[0] == 0 or overlay_resized.size[1] == 0:
-                    st.warning("⚠️ 画像サイズが不正です。再試行しています...")
-                    # ズームレベルをリセット
-                    st.session_state.editor_zoom_level = 1.0
-                    st.rerun()
-                
-                # 注釈を表示（ステップ3と同じ）
-                st.markdown(
-                    """
-                    <p style="font-size: 12px; color: #666; margin-bottom: 8px;">
-                    <b>注:</b> 編集画面が表示されないときは選択リセットか表示サイズ調整を押してください。
-                    </p>
-                    """,
-                    unsafe_allow_html=True
-                )
-                
-                # キーを動的に生成（ステップ3と同様に状態を反映）
-                if 'calibration_reset_counter' not in st.session_state:
-                    st.session_state.calibration_reset_counter = 0
-                
-                selected_wall_id = st.session_state.selected_wall_for_calibration.get('id', 'none') if st.session_state.selected_wall_for_calibration else 'none'
-                calib_key = f"step2_calib_click_{selected_wall_id}_{st.session_state.calibration_reset_counter}"
+                    # オーバーレイ描画用にコピー
+                    overlay = disp_img.copy()
+                    draw = ImageDraw.Draw(overlay)
 
-                # クリック受付（表示画像）
-                click = streamlit_image_coordinates(overlay_resized, key=calib_key)
+                    # 選択された壁をハイライト表示
+                    target_wall_data = None
+                    px_distance = None
+                    if st.session_state.selected_wall_for_calibration:
+                        selected_wall = st.session_state.selected_wall_for_calibration
+                        s = selected_wall.get("start", [])
+                        e = selected_wall.get("end", [])
+                        if len(s) >= 2 and len(e) >= 2:
+                            # メートル→ピクセル変換（Y座標反転を考慮）
+                            x1 = int((s[0] - min_x) * scale_px) + margin
+                            y1 = img_height_calc - (int((s[1] - min_y) * scale_px) + margin)
+                            x2 = int((e[0] - min_x) * scale_px) + margin
+                            y2 = img_height_calc - (int((e[1] - min_y) * scale_px) + margin)
 
-                # クリック処理（壁選択方式 - ステップ3と同じ座標変換ロジック）
-                if click and click.get("x") is not None:
-                    cur = (click["x"], click["y"])
-                    if st.session_state.scale_last_click != cur:
-                        st.session_state.scale_last_click = cur
-                        
-                        # ズーム補正を適用（ステップ3と同じロジック）
-                        zoom_level = st.session_state.get('editor_zoom_level', 1.0)
-                        adjusted_x = click["x"] / zoom_level
-                        adjusted_y = click["y"] / zoom_level
-                        
-                        # 元の座標に変換（ステップ3と同じ _display_to_original 関数を使用）
-                        if scale_disp != 1.0:
-                            orig_click_x, orig_click_y = _display_to_original(adjusted_x, adjusted_y, scale_disp)
-                        else:
-                            orig_click_x = adjusted_x
-                            orig_click_y = adjusted_y
-                        
-                        # クリック位置から最も近い壁を検出（元画像の座標系で）
-                        nearest_wall, distance = _find_nearest_wall_from_click(
-                            int(orig_click_x), int(orig_click_y),
-                            walls, scale_px, margin,
-                            img_height_calc, min_x, min_y, max_x, max_y,
-                            threshold=20
+                            # 表示座標で赤線を描画
+                            dx1 = int(x1 * scale_disp)
+                            dy1 = int(y1 * scale_disp)
+                            dx2 = int(x2 * scale_disp)
+                            dy2 = int(y2 * scale_disp)
+                            draw.line((dx1, dy1, dx2, dy2), fill=(255, 0, 0), width=4)
+
+                            # 壁データを準備
+                            wall_length_px = math.hypot(x2 - x1, y2 - y1)
+                            target_wall_data = {
+                                'wall': selected_wall,
+                                'id': selected_wall.get('id', '?'),
+                                'length_px': wall_length_px,
+                                'start_m': s,
+                                'end_m': e
+                            }
+                            px_distance = wall_length_px
+
+                        # スケール入力と反映
+                        if px_distance is not None and target_wall_data is not None:
+                            # マス数入力フォーム
+                            default_grid = st.session_state.get("step3_grid_input_val", 1.0)
+                        grid_count = st.number_input(
+                            "この壁は一条工務店CAD図面上で何マス分ですか？ (1マス=0.9m)",
+                            min_value=0.1,
+                            max_value=100.0,
+                            value=float(default_grid),
+                            step=0.1,
+                            key="step3_grid_input"
                         )
+                        st.session_state.step3_grid_input_val = grid_count
                         
-                        if nearest_wall:
-                            # 壁を選択
-                            st.session_state.selected_wall_for_calibration = nearest_wall
-                        else:
-                            # 閾値外の場合は選択解除
+                        if st.button("💾 このスケールで更新", type="primary", use_container_width=True, key="step3_apply_scale"):
+                            try:
+                                # 実測距離（メートル単位）
+                                actual_distance_m = grid_count * 0.9  # 1マス = 0.9m = 90cm
+                                
+                                # 現在の壁の長さ（メートル単位）を取得
+                                current_length_m = target_wall_data['wall'].get('length')
+                                if current_length_m is None:
+                                    dx_m = target_wall_data['end_m'][0] - target_wall_data['start_m'][0]
+                                    dy_m = target_wall_data['end_m'][1] - target_wall_data['start_m'][1]
+                                    current_length_m = math.sqrt(dx_m**2 + dy_m**2)
+                                
+                                if current_length_m <= 0:
+                                    st.error("❌ 現在の壁長が0mのため再計算できません。別の壁で試してください。")
+                                else:
+                                    # スケール比率を計算（実測/現在）
+                                    scale_ratio = actual_distance_m / current_length_m
+                                    
+                                    # 現在のJSONを読み込み
+                                    import copy
+                                    out_dir = Path(st.session_state.out_dir)
+                                    json_path = out_dir / st.session_state.json_name
+                                    json_data = json.loads(st.session_state.json_bytes.decode("utf-8"))
+                                    old_pixel_to_meter = json_data.get("metadata", {}).get("pixel_to_meter", 0.005) or 0.005
+                                    
+                                    # 新しいpixel_to_meterを計算
+                                    new_pixel_to_meter = old_pixel_to_meter * scale_ratio
+                                    
+                                    # 各壁の座標をスケール変換
+                                    calibrated_json = copy.deepcopy(json_data)
+                                    for wall in calibrated_json.get("walls", []):
+                                        if "start" in wall and "end" in wall:
+                                            # 座標をスケール変換（X-Y平面のみ）
+                                            wall["start"] = [round(wall["start"][0] * scale_ratio, 3),
+                                                           round(wall["start"][1] * scale_ratio, 3)]
+                                            wall["end"] = [round(wall["end"][0] * scale_ratio, 3),
+                                                         round(wall["end"][1] * scale_ratio, 3)]
+                                            # 長さを再計算（X-Y平面の長さ）
+                                            dx = wall["end"][0] - wall["start"][0]
+                                            dy = wall["end"][1] - wall["start"][1]
+                                            wall["length"] = round(math.sqrt(dx**2 + dy**2), 3)
+                                            
+                                            # 高さは2.4m固定（スケール変換しない）
+                                            # 一条工務店の標準天井高は2.4mで固定
+                                            if "height" not in wall or wall.get("height") != 2.4:
+                                                wall["height"] = 2.4
+                                            
+                                            # 厚さは10cm固定（スケール変換しない）
+                                            # 一条工務店の標準壁厚は10cmで固定
+                                            wall["thickness"] = 0.1
+                                    
+                                    # メタデータを更新
+                                    calibrated_json.setdefault("metadata", {})["pixel_to_meter"] = new_pixel_to_meter
+                                    
+                                    # デバッグ情報：校正後の座標範囲を計算
+                                    all_x_after = []
+                                    all_y_after = []
+                                    for w in calibrated_json.get("walls", []):
+                                        if "start" in w and "end" in w:
+                                            all_x_after.extend([w["start"][0], w["end"][0]])
+                                            all_y_after.extend([w["start"][1], w["end"][1]])
+                                    
+                                    if all_x_after and all_y_after:
+                                        min_x_after, max_x_after = min(all_x_after), max(all_x_after)
+                                        min_y_after, max_y_after = min(all_y_after), max(all_y_after)
+                                        width_after = max_x_after - min_x_after
+                                        height_after = max_y_after - min_y_after
+                                    
+                                    # 保存と再可視化
+                                    json_path.write_text(json.dumps(calibrated_json, indent=2, ensure_ascii=False))
+                                    st.session_state.json_bytes = json_path.read_bytes()
+                                    viz_path = out_dir / st.session_state.viz_name
+                                    visualize_3d_walls(
+                                        str(json_path),
+                                        str(viz_path),
+                                        scale=int(st.session_state.viz_scale),
+                                        wall_color=(0, 0, 0),
+                                        bg_color=(255, 255, 255)
+                                    )
+                                    if viz_path.exists():
+                                        st.session_state.viz_bytes = viz_path.read_bytes()
+
+                                    # 後続用に状態更新
+                                    st.session_state.scale_calibration_done = True
+                                    st.session_state.selected_wall_for_calibration = None
+                                    st.session_state.scale_last_click = None
+                                    st.session_state.step3_grid_input_val = grid_count
+                                    # 3D表示を開く
+                                    st.session_state.open_3d_expander = True
+                                    # 手動編集へ遷移
+                                    if st.session_state.get('user') is None:
+                                        st.warning("ステップ3はログインが必要です。サイドバーでログインしてください。")
+                                    else:
+                                        st.session_state.workflow_step = 3
+                                        st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ スケール更新でエラーが発生しました: {e}")
+                                import traceback
+                                st.code(traceback.format_exc())
+
+                    # ズームコントロール（ステップ2）
+                    if 'editor_zoom_level' not in st.session_state:
+                        st.session_state.editor_zoom_level = 1.0
+                    
+                    col_zoom_label, col_zoom1, col_zoom2, col_zoom_space = st.columns([3, 1, 1, 7])
+                    with col_zoom_label:
+                        st.markdown(f"表示サイズ調整: {st.session_state.editor_zoom_level*100:.0f}%")
+                    with col_zoom1:
+                        if st.button("🔍−", key="step2_zoom_out"):
+                            st.session_state.editor_zoom_level = max(0.2, st.session_state.editor_zoom_level - 0.2)
+                            st.rerun()
+                    with col_zoom2:
+                        if st.button("🔍+", key="step2_zoom_in"):
+                            st.session_state.editor_zoom_level = min(1.6, st.session_state.editor_zoom_level + 0.2)
+                            st.rerun()
+                    
+                    
+                    # ズーム適用
+                    zoom_level = st.session_state.get('editor_zoom_level', 1.0)
+                    if zoom_level != 1.0:
+                        w, h = overlay.size
+                        overlay_resized = overlay.resize(
+                            (int(w * zoom_level), int(h * zoom_level)),
+                            Image.Resampling.LANCZOS
+                        )
+                    else:
+                        overlay_resized = overlay
+                    
+                    # 画像データの検証（表示エラー対策 - ステップ3と同じロジック）
+                    if overlay_resized is None:
+                        st.warning("⚠️ 画像データを再生成しています...")
+                        st.rerun()
+                    
+                    if overlay_resized.size[0] == 0 or overlay_resized.size[1] == 0:
+                        st.warning("⚠️ 画像サイズが不正です。再試行しています...")
+                        # ズームレベルをリセット
+                        st.session_state.editor_zoom_level = 1.0
+                        st.rerun()
+                    
+                    # 注釈を表示（ステップ3と同じ）
+                    st.markdown(
+                        """
+                        <p style="font-size: 12px; color: #666; margin-bottom: 8px;">
+                        <b>注:</b> 編集画面が表示されないときは選択リセットか表示サイズ調整を押してください。
+                        </p>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                    
+                    # キーを動的に生成（ステップ3と同様に状態を反映）
+                    if 'calibration_reset_counter' not in st.session_state:
+                        st.session_state.calibration_reset_counter = 0
+                    
+                    selected_wall_id = st.session_state.selected_wall_for_calibration.get('id', 'none') if st.session_state.selected_wall_for_calibration else 'none'
+                    calib_key = f"step2_calib_click_{selected_wall_id}_{st.session_state.calibration_reset_counter}"
+
+                    # クリック受付（表示画像）
+                    click = streamlit_image_coordinates(overlay_resized, key=calib_key)
+
+                    # クリック処理（壁選択方式 - ステップ3と同じ座標変換ロジック）
+                    if click and click.get("x") is not None:
+                        cur = (click["x"], click["y"])
+                        if st.session_state.scale_last_click != cur:
+                            st.session_state.scale_last_click = cur
+                            
+                            # ズーム補正を適用（ステップ3と同じロジック）
+                            zoom_level = st.session_state.get('editor_zoom_level', 1.0)
+                            adjusted_x = click["x"] / zoom_level
+                            adjusted_y = click["y"] / zoom_level
+                            
+                            # 元の座標に変換（ステップ3と同じ _display_to_original 関数を使用）
+                            if scale_disp != 1.0:
+                                orig_click_x, orig_click_y = _display_to_original(adjusted_x, adjusted_y, scale_disp)
+                            else:
+                                orig_click_x = adjusted_x
+                                orig_click_y = adjusted_y
+                            
+                            # クリック位置から最も近い壁を検出（元画像の座標系で）
+                            nearest_wall, distance = _find_nearest_wall_from_click(
+                                int(orig_click_x), int(orig_click_y),
+                                walls, scale_px, margin,
+                                img_height_calc, min_x, min_y, max_x, max_y,
+                                threshold=20
+                            )
+                            
+                            if nearest_wall:
+                                # 壁を選択
+                                st.session_state.selected_wall_for_calibration = nearest_wall
+                            else:
+                                # 閾値外の場合は選択解除
+                                st.session_state.selected_wall_for_calibration = None
+                            
+                            st.rerun()
+
+                    col_reset = st.columns(2)[0]
+                    with col_reset:
+                        if st.button("🔄 選択をリセット", use_container_width=True, key="step3_calib_reset"):
                             st.session_state.selected_wall_for_calibration = None
-                        
-                        st.rerun()
+                            st.session_state.scale_last_click = None
+                            st.session_state.calibration_reset_counter = st.session_state.get('calibration_reset_counter', 0) + 1
+                            st.rerun()
 
-                col_reset = st.columns(2)[0]
-                with col_reset:
-                    if st.button("🔄 選択をリセット", use_container_width=True, key="step3_calib_reset"):
-                        st.session_state.selected_wall_for_calibration = None
-                        st.session_state.scale_last_click = None
-                        st.session_state.calibration_reset_counter = st.session_state.get('calibration_reset_counter', 0) + 1
-                        st.rerun()
-
-                # スケール適用済みの案内（遷移は適用時に実施済み）
-                if st.session_state.get("scale_calibration_done"):
-                    st.success("スケールを適用しました。手動編集に進んでください。")
-            except Exception as e:
-                st.error(f"スケール校正ビュー表示エラー: {e}")
-            
-            # スキップして次へボタンを最後に配置
-            if st.button("⏭️ スキップして次へ", use_container_width=True, key="step3_skip"):
-                if st.session_state.get('user') is None:
-                    st.warning("ステップ3はログインが必要です。サイドバーでログインしてください。")
-                else:
-                    st.session_state.workflow_step = 3
-                    st.session_state.open_3d_expander = True
+                    # スケール適用済みの案内（遷移は適用時に実施済み）
+                    if st.session_state.get("scale_calibration_done"):
+                        st.success("スケールを適用しました。手動編集に進んでください。")
+                except Exception as e:
+                    st.error(f"スケール校正ビュー表示エラー: {e}")
+                
+                # スキップして次へボタンを最後に配置
+                if st.button("⏭️ スキップして次へ", use_container_width=True, key="step3_skip"):
+                    if st.session_state.get('user') is None:
+                        st.warning("ステップ3はログインが必要です。サイドバーでログインしてください。")
+                    else:
+                        st.session_state.workflow_step = 3
+                        st.session_state.open_3d_expander = True
                     st.rerun()
     # ============= ステップ3: 手動編集 =============
     with st.expander("Step 3：手動編集", expanded=(st.session_state.workflow_step == 3)):
         # Gate Step 3 UI behind login: show warning and skip internals when not logged in
         if st.session_state.get('user') is None:
             st.warning("ステップ3はログインが必要です。サイドバーでログインしてください。")
+            st.stop()
         else:
             if st.session_state.workflow_step >= 3 and st.session_state.processed:
                 st.divider()

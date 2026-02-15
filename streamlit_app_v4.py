@@ -1550,6 +1550,7 @@ def main():
         # Gate Step 2 UI behind login: show warning and skip internals when not logged in
         if st.session_state.get('user') is None:
             st.warning("ステップ2はログインが必要です。サイドバーでログインしてください。")
+            st.stop()
         else:
             if st.session_state.workflow_step >= 2 and st.session_state.processed:
                 st.divider()
@@ -1872,6 +1873,7 @@ def main():
         # Gate Step 3 UI behind login: show warning and skip internals when not logged in
         if st.session_state.get('user') is None:
             st.warning("ステップ3はログインが必要です。サイドバーでログインしてください。")
+            st.stop()
         else:
             if st.session_state.workflow_step >= 3 and st.session_state.processed:
                 st.divider()
@@ -3111,6 +3113,7 @@ def main():
                         #st.write("💡 追加したい壁の端点2点を指定してください")
                     #else:
                         #st.write("💡 画像をクリックして四角形の対角線上の2点を指定してください")
+                        st.stop()
                     
                     # 窓追加モードで2点選択完了時：壁検出結果をハイライト表示（線を結合モードは除外）
                     if edit_mode == "窓を追加" and len(st.session_state.rect_coords) == 2:
@@ -4055,7 +4058,7 @@ def main():
                                 #        )
                                 #else:
                                 #    st.warning("⚠️ 追加可能な窓が見つかりません")
-                            
+                                    st.stop()
                             # 一時ファイルに保存
                             temp_json_path = Path(st.session_state.out_dir) / "walls_3d_edited.json"
                             with open(temp_json_path, 'w', encoding='utf-8') as f:

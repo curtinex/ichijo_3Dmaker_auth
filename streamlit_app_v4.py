@@ -5497,6 +5497,24 @@ def main():
             # 3Dビューア埋め込み表示
             if st.session_state.get('viewer_html_bytes'):
                 st.markdown("### 🎨 3Dビューア")
+                # ボタン: 現在の JSON から viewer HTML を再生成（テンプレート更新後の反映用）
+                try:
+                    if st.button("🔁 ビューア再生成 (現在のJSONから)"):
+                        try:
+                            # 一時JSONを書き出してローカル generate 関数でHTMLを作成
+                            tmp_json_path = Path(st.session_state.get('out_dir', '.')) / "viewer_refresh.json"
+                            with open(tmp_json_path, 'wb') as jf:
+                                jf.write(st.session_state.get('json_bytes', b''))
+                            tmp_viewer = Path(st.session_state.get('out_dir', '.')) / "viewer_refreshed.html"
+                            _generate_3d_viewer_html(tmp_json_path, tmp_viewer)
+                            st.session_state.viewer_html_bytes = tmp_viewer.read_bytes()
+                            st.session_state.viewer_html_name = tmp_viewer.name
+                            st.experimental_rerun()
+                        except Exception as e:
+                            st.error(f"ビューア再生成に失敗しました: {e}")
+                except Exception:
+                    pass
+
                 import streamlit.components.v1 as components
                 components.html(
                     st.session_state.viewer_html_bytes.decode('utf-8'),

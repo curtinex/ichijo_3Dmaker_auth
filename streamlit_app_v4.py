@@ -5505,20 +5505,46 @@ def main():
                             tmp_json_path = Path(st.session_state.get('out_dir', '.')) / "viewer_refresh.json"
                             with open(tmp_json_path, 'wb') as jf:
                                 jf.write(st.session_state.get('json_bytes', b''))
-                            # Generate with local ui_helpers explicitly and write to unique file to avoid caching
-                            import importlib.util, random
+                            # Generate HTML by loading the local template string and substituting
+                            # placeholders. This avoids importing ui_helpers (which may require PIL)
+                            # and ensures the local template is used even if environment lacks Pillow.
+                            import random, json
                             local_ui_path = Path(__file__).parent / "ichijo_core_check" / "ichijo_core" / "ui_helpers.py"
                             if local_ui_path.exists():
-                                spec = importlib.util.spec_from_file_location("local_ichijo_ui_helpers", str(local_ui_path))
-                                local_ui = importlib.util.module_from_spec(spec)
-                                spec.loader.exec_module(local_ui)
-                                gen_func = getattr(local_ui, 'generate_3d_viewer_html')
+                                tpl_txt = local_ui_path.read_text(encoding='utf-8')
+                                marker = "html_template = '''"
+                                si = tpl_txt.find(marker)
+                                if si != -1:
+                                    si += len(marker)
+                                    ei = tpl_txt.find("'''", si)
+                                    if ei != -1:
+                                        template = tpl_txt[si:ei]
+                                    else:
+                                        template = None
+                                else:
+                                    template = None
                             else:
-                                gen_func = _generate_3d_viewer_html
+                                template = None
 
-                            tmp_viewer = Path(st.session_state.get('out_dir', '.')) / f"viewer_refreshed_{int(time.time())}_{random.randint(0,9999)}.html"
-                            gen_func(tmp_json_path, tmp_viewer)
-                            st.session_state.viewer_html_bytes = tmp_viewer.read_bytes()
+                            if template is None:
+                                # fallback to generation function if template not found
+                                tmp_viewer = Path(st.session_state.get('out_dir', '.')) / f"viewer_refreshed_{int(time.time())}_{random.randint(0,9999)}.html"
+                                _generate_3d_viewer_html(tmp_json_path, tmp_viewer)
+                                st.session_state.viewer_html_bytes = tmp_viewer.read_bytes()
+                            else:
+                                # embed JSON and replace placeholders
+                                json_data = json.loads(st.session_state.get('json_bytes', b'{}').decode('utf-8'))
+                                json_content = json.dumps(json_data, ensure_ascii=False)
+                                html = template
+                                html = html.replace('BACKGROUND_COLOR_PLACEHOLDER', '0xf0f0f0')
+                                html = html.replace('EMISSIVE_INTENSITY_PLACEHOLDER', '0.4')
+                                html = html.replace('JSON_DATA_PLACEHOLDER', json_content)
+                                html = html.replace('AMBIENT_LIGHT_PLACEHOLDER', "const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);\n            scene.add(ambientLight);")
+                                html = html.replace('DIRECTIONAL_LIGHT_PLACEHOLDER', "const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);\n            dirLight.position.set(0,50,0); scene.add(dirLight);")
+                                html = html.replace('WITH_LIGHTS_PLACEHOLDER', '')
+                                tmp_viewer = Path(st.session_state.get('out_dir', '.')) / f"viewer_refreshed_{int(time.time())}_{random.randint(0,9999)}.html"
+                                tmp_viewer.write_text(html, encoding='utf-8')
+                                st.session_state.viewer_html_bytes = tmp_viewer.read_bytes()
                             st.session_state.viewer_html_name = tmp_viewer.name
                             # Try to rerun the app; if not available in this streamlit version,
                             # fall back to a JS page reload via components.html

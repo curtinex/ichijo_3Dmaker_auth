@@ -5508,7 +5508,7 @@ def main():
                             # Generate HTML by loading the local template string and substituting
                             # placeholders. This avoids importing ui_helpers (which may require PIL)
                             # and ensures the local template is used even if environment lacks Pillow.
-                            import random, json
+                            import random
                             local_ui_path = Path(__file__).parent / "ichijo_core_check" / "ichijo_core" / "ui_helpers.py"
                             if local_ui_path.exists():
                                 tpl_txt = local_ui_path.read_text(encoding='utf-8')

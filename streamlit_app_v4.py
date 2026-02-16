@@ -5505,8 +5505,19 @@ def main():
                             tmp_json_path = Path(st.session_state.get('out_dir', '.')) / "viewer_refresh.json"
                             with open(tmp_json_path, 'wb') as jf:
                                 jf.write(st.session_state.get('json_bytes', b''))
-                            tmp_viewer = Path(st.session_state.get('out_dir', '.')) / "viewer_refreshed.html"
-                            _generate_3d_viewer_html(tmp_json_path, tmp_viewer)
+                            # Generate with local ui_helpers explicitly and write to unique file to avoid caching
+                            import importlib.util, time, random
+                            local_ui_path = Path(__file__).parent / "ichijo_core_check" / "ichijo_core" / "ui_helpers.py"
+                            if local_ui_path.exists():
+                                spec = importlib.util.spec_from_file_location("local_ichijo_ui_helpers", str(local_ui_path))
+                                local_ui = importlib.util.module_from_spec(spec)
+                                spec.loader.exec_module(local_ui)
+                                gen_func = getattr(local_ui, 'generate_3d_viewer_html')
+                            else:
+                                gen_func = _generate_3d_viewer_html
+
+                            tmp_viewer = Path(st.session_state.get('out_dir', '.')) / f"viewer_refreshed_{int(time.time())}_{random.randint(0,9999)}.html"
+                            gen_func(tmp_json_path, tmp_viewer)
                             st.session_state.viewer_html_bytes = tmp_viewer.read_bytes()
                             st.session_state.viewer_html_name = tmp_viewer.name
                             # Try to rerun the app; if not available in this streamlit version,

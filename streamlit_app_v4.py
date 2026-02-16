@@ -5506,7 +5506,7 @@ def main():
                             with open(tmp_json_path, 'wb') as jf:
                                 jf.write(st.session_state.get('json_bytes', b''))
                             # Generate with local ui_helpers explicitly and write to unique file to avoid caching
-                            import importlib.util, time, random
+                            import importlib.util, random
                             local_ui_path = Path(__file__).parent / "ichijo_core_check" / "ichijo_core" / "ui_helpers.py"
                             if local_ui_path.exists():
                                 spec = importlib.util.spec_from_file_location("local_ichijo_ui_helpers", str(local_ui_path))

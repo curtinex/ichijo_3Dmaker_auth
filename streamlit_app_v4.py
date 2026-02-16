@@ -5509,7 +5509,17 @@ def main():
                             _generate_3d_viewer_html(tmp_json_path, tmp_viewer)
                             st.session_state.viewer_html_bytes = tmp_viewer.read_bytes()
                             st.session_state.viewer_html_name = tmp_viewer.name
-                            st.experimental_rerun()
+                            # Try to rerun the app; if not available in this streamlit version,
+                            # fall back to a JS page reload via components.html
+                            if hasattr(st, 'experimental_rerun'):
+                                try:
+                                    st.experimental_rerun()
+                                except Exception:
+                                    import streamlit.components.v1 as components
+                                    components.html("<script>window.location.reload();</script>", height=0)
+                            else:
+                                import streamlit.components.v1 as components
+                                components.html("<script>window.location.reload();</script>", height=0)
                         except Exception as e:
                             st.error(f"ビューア再生成に失敗しました: {e}")
                 except Exception:

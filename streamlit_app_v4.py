@@ -204,14 +204,40 @@ try:
     from ichijo_core.stair_utils import (
         STAIR_PATTERNS,
     )
-    from ichijo_core.ui_helpers import (
-        prepare_display_from_pil as _prepare_display_from_pil,
-        prepare_display_from_bytes as _prepare_display_from_bytes,
-        display_to_original as _display_to_original,
-        display_to_meter as _display_to_meter,
-        save_uploaded_file as _save_uploaded_file,
-        generate_3d_viewer_html as _generate_3d_viewer_html,
-    )
+    # Prefer local ui_helpers in ichijo_core_check if present (load directly to avoid
+    # potential conflict with installed ichijo_core package). Fall back to package import.
+    try:
+        import importlib.util
+        local_ui_path = Path(__file__).parent / "ichijo_core_check" / "ichijo_core" / "ui_helpers.py"
+        if local_ui_path.exists():
+            spec = importlib.util.spec_from_file_location("local_ichijo_ui_helpers", str(local_ui_path))
+            local_ui = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(local_ui)
+            _prepare_display_from_pil = local_ui.prepare_display_from_pil
+            _prepare_display_from_bytes = local_ui.prepare_display_from_bytes
+            _display_to_original = local_ui.display_to_original
+            _display_to_meter = local_ui.display_to_meter
+            _save_uploaded_file = local_ui.save_uploaded_file
+            _generate_3d_viewer_html = local_ui.generate_3d_viewer_html
+        else:
+            from ichijo_core.ui_helpers import (
+                prepare_display_from_pil as _prepare_display_from_pil,
+                prepare_display_from_bytes as _prepare_display_from_bytes,
+                display_to_original as _display_to_original,
+                display_to_meter as _display_to_meter,
+                save_uploaded_file as _save_uploaded_file,
+                generate_3d_viewer_html as _generate_3d_viewer_html,
+            )
+    except Exception:
+        # Last resort: try package import
+        from ichijo_core.ui_helpers import (
+            prepare_display_from_pil as _prepare_display_from_pil,
+            prepare_display_from_bytes as _prepare_display_from_bytes,
+            display_to_original as _display_to_original,
+            display_to_meter as _display_to_meter,
+            save_uploaded_file as _save_uploaded_file,
+            generate_3d_viewer_html as _generate_3d_viewer_html,
+        )
     
     # window_utilsとwall_editingのインポート（ichijo_coreは使わずフォールバック版のみ使用）
     try:

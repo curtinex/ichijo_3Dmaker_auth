@@ -204,40 +204,14 @@ try:
     from ichijo_core.stair_utils import (
         STAIR_PATTERNS,
     )
-    # Prefer local ui_helpers in ichijo_core_check if present (load directly to avoid
-    # potential conflict with installed ichijo_core package). Fall back to package import.
-    try:
-        import importlib.util
-        local_ui_path = Path(__file__).parent / "ichijo_core_check" / "ichijo_core" / "ui_helpers.py"
-        if local_ui_path.exists():
-            spec = importlib.util.spec_from_file_location("local_ichijo_ui_helpers", str(local_ui_path))
-            local_ui = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(local_ui)
-            _prepare_display_from_pil = local_ui.prepare_display_from_pil
-            _prepare_display_from_bytes = local_ui.prepare_display_from_bytes
-            _display_to_original = local_ui.display_to_original
-            _display_to_meter = local_ui.display_to_meter
-            _save_uploaded_file = local_ui.save_uploaded_file
-            _generate_3d_viewer_html = local_ui.generate_3d_viewer_html
-        else:
-            from ichijo_core.ui_helpers import (
-                prepare_display_from_pil as _prepare_display_from_pil,
-                prepare_display_from_bytes as _prepare_display_from_bytes,
-                display_to_original as _display_to_original,
-                display_to_meter as _display_to_meter,
-                save_uploaded_file as _save_uploaded_file,
-                generate_3d_viewer_html as _generate_3d_viewer_html,
-            )
-    except Exception:
-        # Last resort: try package import
-        from ichijo_core.ui_helpers import (
-            prepare_display_from_pil as _prepare_display_from_pil,
-            prepare_display_from_bytes as _prepare_display_from_bytes,
-            display_to_original as _display_to_original,
-            display_to_meter as _display_to_meter,
-            save_uploaded_file as _save_uploaded_file,
-            generate_3d_viewer_html as _generate_3d_viewer_html,
-        )
+    from ichijo_core.ui_helpers import (
+        prepare_display_from_pil as _prepare_display_from_pil,
+        prepare_display_from_bytes as _prepare_display_from_bytes,
+        display_to_original as _display_to_original,
+        display_to_meter as _display_to_meter,
+        save_uploaded_file as _save_uploaded_file,
+        generate_3d_viewer_html as _generate_3d_viewer_html,
+    )
     
     # window_utilsとwall_editingのインポート（ichijo_coreは使わずフォールバック版のみ使用）
     try:
@@ -556,14 +530,6 @@ try:
                             dy = wall['end'][1] - wall['start'][1]
                             wall['length'] = round(math.sqrt(dx**2 + dy**2), 3)
                             break
-                    # 正規化: start/end の順序を一貫させる（表示の角度不一致を防止）
-                    for wall in walls:
-                        if wall['id'] == first_wall_id:
-                            sx, sy = wall['start'][0], wall['start'][1]
-                            ex, ey = wall['end'][0], wall['end'][1]
-                            if (sx > ex) or (sx == ex and sy > ey):
-                                wall['start'], wall['end'] = wall['end'], wall['start']
-                            break
                     walls[:] = [w for w in walls if w['id'] not in other_wall_ids]
                 elif 'wall1' in pair and 'wall2' in pair:
                     wall1_id = pair['wall1']['id']
@@ -596,27 +562,6 @@ try:
                             dy = wall['end'][1] - wall['start'][1]
                             wall['length'] = round(math.sqrt(dx**2 + dy**2), 3)
                             break
-                    # 正規化: start/end の順序を一貫させる（表示の角度不一致を防止）
-                    for wall in walls:
-                        if wall['id'] == wall1_id:
-                            sx, sy = wall['start'][0], wall['start'][1]
-                            ex, ey = wall['end'][0], wall['end'][1]
-                            if (sx > ex) or (sx == ex and sy > ey):
-                                wall['start'], wall['end'] = wall['end'], wall['start']
-                            break
-                    # デバッグ: 結合後の角度を 2D/3D 表現でログに残す
-                    try:
-                        w = next((ww for ww in walls if ww['id'] == wall1_id), None)
-                        if w is not None:
-                            # 2D 角度（degrees）: ichijo_core のユーティリティに合わせる
-                            angle2d = _wall_angle_deg(w)
-                            # 3D 角度（degrees）: Three.js 側で使用する atan2(z, x) を模倣
-                            dx = w['end'][0] - w['start'][0]
-                            dy = w['end'][1] - w['start'][1]
-                            angle3d = math.degrees(math.atan2(-dy, dx))
-                            st.session_state.setdefault('debug_log', []).append(f"merge: wall_id={wall1_id} angle2d={angle2d:.2f}deg angle3d={angle3d:.2f}deg start={w['start']} end={w['end']}")
-                    except Exception:
-                        pass
                     walls[:] = [w for w in walls if w['id'] != wall2_id]
             updated_data['metadata']['total_walls'] = len(walls)
             return updated_data
@@ -5497,71 +5442,6 @@ def main():
             # 3Dビューア埋め込み表示
             if st.session_state.get('viewer_html_bytes'):
                 st.markdown("### 🎨 3Dビューア")
-                # ボタン: 現在の JSON から viewer HTML を再生成（テンプレート更新後の反映用）
-                try:
-                    if st.button("🔁 ビューア再生成 (現在のJSONから)"):
-                        try:
-                            # 一時JSONを書き出してローカル generate 関数でHTMLを作成
-                            tmp_json_path = Path(st.session_state.get('out_dir', '.')) / "viewer_refresh.json"
-                            with open(tmp_json_path, 'wb') as jf:
-                                jf.write(st.session_state.get('json_bytes', b''))
-                            # Generate HTML by loading the local template string and substituting
-                            # placeholders. This avoids importing ui_helpers (which may require PIL)
-                            # and ensures the local template is used even if environment lacks Pillow.
-                            import random
-                            local_ui_path = Path(__file__).parent / "ichijo_core_check" / "ichijo_core" / "ui_helpers.py"
-                            if local_ui_path.exists():
-                                tpl_txt = local_ui_path.read_text(encoding='utf-8')
-                                marker = "html_template = '''"
-                                si = tpl_txt.find(marker)
-                                if si != -1:
-                                    si += len(marker)
-                                    ei = tpl_txt.find("'''", si)
-                                    if ei != -1:
-                                        template = tpl_txt[si:ei]
-                                    else:
-                                        template = None
-                                else:
-                                    template = None
-                            else:
-                                template = None
-
-                            if template is None:
-                                # fallback to generation function if template not found
-                                tmp_viewer = Path(st.session_state.get('out_dir', '.')) / f"viewer_refreshed_{int(time.time())}_{random.randint(0,9999)}.html"
-                                _generate_3d_viewer_html(tmp_json_path, tmp_viewer)
-                                st.session_state.viewer_html_bytes = tmp_viewer.read_bytes()
-                            else:
-                                # embed JSON and replace placeholders
-                                json_data = json.loads(st.session_state.get('json_bytes', b'{}').decode('utf-8'))
-                                json_content = json.dumps(json_data, ensure_ascii=False)
-                                html = template
-                                html = html.replace('BACKGROUND_COLOR_PLACEHOLDER', '0xf0f0f0')
-                                html = html.replace('EMISSIVE_INTENSITY_PLACEHOLDER', '0.4')
-                                html = html.replace('JSON_DATA_PLACEHOLDER', json_content)
-                                html = html.replace('AMBIENT_LIGHT_PLACEHOLDER', "const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);\n            scene.add(ambientLight);")
-                                html = html.replace('DIRECTIONAL_LIGHT_PLACEHOLDER', "const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);\n            dirLight.position.set(0,50,0); scene.add(dirLight);")
-                                html = html.replace('WITH_LIGHTS_PLACEHOLDER', '')
-                                tmp_viewer = Path(st.session_state.get('out_dir', '.')) / f"viewer_refreshed_{int(time.time())}_{random.randint(0,9999)}.html"
-                                tmp_viewer.write_text(html, encoding='utf-8')
-                                st.session_state.viewer_html_bytes = tmp_viewer.read_bytes()
-                            st.session_state.viewer_html_name = tmp_viewer.name
-                            # Try to rerun the app; if not available in this streamlit version,
-                            # fall back to a JS page reload via components.html
-                            if hasattr(st, 'experimental_rerun'):
-                                try:
-                                    st.experimental_rerun()
-                                except Exception:
-                                    import streamlit.components.v1 as components
-                                    components.html("<script>window.location.reload();</script>", height=0)
-                            else:
-                                import streamlit.components.v1 as components
-                                components.html("<script>window.location.reload();</script>", height=0)
-                        except Exception as e:
-                            st.error(f"ビューア再生成に失敗しました: {e}")
-                except Exception:
-                    pass
-
                 import streamlit.components.v1 as components
                 components.html(
                     st.session_state.viewer_html_bytes.decode('utf-8'),
@@ -5585,23 +5465,6 @@ def main():
     
     # ============= フッター（全ステップ共通） =============
     st.divider()
-    # 常時確認できるデバッグログ（画面下部）
-    with st.expander("🔍 デバッグログ (最新)", expanded=False):
-        try:
-            dbg = st.session_state.get('debug_log', [])
-            dbg_ts = st.session_state.get('debug_logs', [])
-            if dbg_ts:
-                st.markdown("**タイムスタンプ付きログ**")
-                for line in dbg_ts[-40:]:
-                    st.text(line)
-            if dbg:
-                st.markdown("**internal debug_log**")
-                for line in dbg[-40:]:
-                    st.text(line)
-            if not dbg and not dbg_ts:
-                st.write("(ログはまだありません)")
-        except Exception as e:
-            st.write(f"ログ表示エラー: {e}")
     with st.expander("📋 利用規約", expanded=False):
         st.markdown("""
         ## 利用規約

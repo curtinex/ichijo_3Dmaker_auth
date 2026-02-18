@@ -131,13 +131,34 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 from PIL import Image
 import stripe
 import streamlit.components.v1 as components
-# --- Supabase helper and simple Auth UI (uses SUPA_URL and SUPA_ANON from Streamlit secrets) ---
+# --- Supabase helper and simple Auth UI (uses SUPA_URL and SUPA_ANON from Streamlit secrets or env) ---
 def get_supabase():
     import streamlit as _st
+    # Try Streamlit secrets first
     try:
         url = _st.secrets.get("SUPA_URL")
         key = _st.secrets.get("SUPA_ANON")
     except Exception:
+        url = None
+        key = None
+
+    # Fallback to environment variables if not set in secrets
+    if not url:
+        url = os.environ.get("SUPA_URL")
+    if not key:
+        key = os.environ.get("SUPA_ANON")
+
+    if not url or not key:
+        return None
+
+    try:
+        from supabase import create_client
+        return create_client(url, key)
+    except Exception as e:
+        try:
+            _st.error(f"Supabase client init error: {type(e).__name__}: {e}")
+        except Exception:
+            pass
         return None
 
 
@@ -191,22 +212,35 @@ def create_checkout_session(email=None):
     except Exception as e:
         st.error(f"Checkout セッション作成に失敗しました: {type(e).__name__}: {e}")
         return None
-    if not url or not key:
-        return None
-    try:
-        from supabase import create_client
-        return create_client(url, key)
-    except Exception as e:
-        try:
-            _st.error(f"Supabase client init error: {type(e).__name__}: {e}")
-        except Exception:
-            pass
-        return None
 
 with st.sidebar.expander("Account"):
     supabase = get_supabase()
     if supabase is None:
-        st.write("Supabase not configured. Set SUPA_URL and SUPA_ANON in Streamlit secrets.")
+        # Diagnostic helper (do not print secret values)
+        has_secret_url = False
+        has_secret_key = False
+        try:
+            has_secret_url = bool(st.secrets.get("SUPA_URL"))
+            has_secret_key = bool(st.secrets.get("SUPA_ANON"))
+        except Exception:
+            pass
+        env_has_url = bool(os.environ.get("SUPA_URL"))
+        env_has_key = bool(os.environ.get("SUPA_ANON"))
+
+        msgs = []
+        if has_secret_url or env_has_url:
+            msgs.append("SUPA_URL: found")
+        else:
+            msgs.append("SUPA_URL: missing")
+        if has_secret_key or env_has_key:
+            msgs.append("SUPA_ANON: found")
+        else:
+            msgs.append("SUPA_ANON: missing")
+
+        st.write("Supabase not configured.")
+        with st.expander("Supabase 診断情報 (値は表示しません)"):
+            for m in msgs:
+                st.write(m)
     else:
         auth_mode = st.radio("Auth", ("Login", "Sign up", "Logout"))
         if auth_mode == "Sign up":
@@ -5632,4 +5666,16 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        import traceback
+        try:
+            import streamlit as _st
+            _st.set_page_config(page_title="起動エラー")
+            _st.error("アプリ起動時にエラーが発生しました。下にスタックトレースを表示します。")
+            _st.code(traceback.format_exc())
+        except Exception:
+            # If Streamlit is not available or fails, print to stderr
+            print(traceback.format_exc())
+        raise

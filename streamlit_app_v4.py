@@ -129,6 +129,8 @@ import streamlit as st
 import fitz  # PyMuPDF (for page count)
 from streamlit_image_coordinates import streamlit_image_coordinates
 from PIL import Image
+import stripe
+import streamlit.components.v1 as components
 # --- Supabase helper and simple Auth UI (uses SUPA_URL and SUPA_ANON from Streamlit secrets) ---
 def get_supabase():
     import streamlit as _st
@@ -136,6 +138,58 @@ def get_supabase():
         url = _st.secrets.get("SUPA_URL")
         key = _st.secrets.get("SUPA_ANON")
     except Exception:
+        return None
+
+
+# --- Stripe helper (uses STRIPE_SECRET and STRIPE_PRICE_ID from Streamlit secrets or env) ---
+def get_stripe_config():
+    try:
+        secret = st.secrets.get("STRIPE_SECRET")
+    except Exception:
+        secret = None
+    if not secret:
+        secret = os.environ.get("STRIPE_SECRET")
+
+    try:
+        price = st.secrets.get("STRIPE_PRICE_ID")
+    except Exception:
+        price = None
+    if not price:
+        price = os.environ.get("STRIPE_PRICE_ID")
+
+    # Base URL used for success/cancel redirects; set in Streamlit secrets as APP_BASE_URL if available
+    try:
+        base = st.secrets.get("APP_BASE_URL")
+    except Exception:
+        base = None
+    if not base:
+        base = os.environ.get("APP_BASE_URL", "http://localhost:8501")
+
+    return secret, price, base
+
+
+def create_checkout_session(email=None):
+    secret, price_id, base_url = get_stripe_config()
+    if not secret or not price_id:
+        st.error("Stripe が設定されていません。STRIPE_SECRET と STRIPE_PRICE_ID を Streamlit secrets か環境変数で設定してください。")
+        return None
+
+    stripe.api_key = secret
+
+    success_url = f"{base_url}/?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{base_url}/?canceled=1"
+
+    try:
+        session = stripe.checkout.Session.create(
+            success_url=success_url,
+            cancel_url=cancel_url,
+            mode="subscription",
+            line_items=[{"price": price_id, "quantity": 1}],
+            metadata={"email": email} if email else None,
+        )
+        return session.url
+    except Exception as e:
+        st.error(f"Checkout セッション作成に失敗しました: {type(e).__name__}: {e}")
         return None
     if not url or not key:
         return None
@@ -158,6 +212,12 @@ with st.sidebar.expander("Account"):
         if auth_mode == "Sign up":
             su_email = st.text_input("Email", key="su_email")
             su_pwd = st.text_input("Password", type="password", key="su_pwd")
+            if st.button("有料プランに登録", key="pay_btn"):
+                # 有料プラン用のCheckoutセッションを作成してリダイレクト
+                email_for_checkout = su_email if su_email else None
+                checkout_url = create_checkout_session(email_for_checkout)
+                if checkout_url:
+                    components.html(f"""<script>window.location.href = '{checkout_url}';</script>""", height=0)
             if st.button("Create account", key="su_btn"):
                 try:
                     res = supabase.auth.sign_up({"email": su_email, "password": su_pwd})

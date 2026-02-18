@@ -1,10 +1,14 @@
 
 streamlit
+stripe
 numpy
 Pillow
 PyMuPDF
 streamlit-image-coordinates
 opencv-python-headless
+
+# Webhook receiver
+Flask
 
 # Image processing
 scikit-image

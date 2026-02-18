@@ -215,32 +215,38 @@ def create_checkout_session(email=None):
 
 with st.sidebar.expander("Account"):
     supabase = get_supabase()
+
+    # Always show diagnostics (do not display secret values)
+    try:
+        has_secret_supa_url = bool(st.secrets.get("SUPA_URL"))
+    except Exception:
+        has_secret_supa_url = False
+    try:
+        has_secret_supa_anon = bool(st.secrets.get("SUPA_ANON"))
+    except Exception:
+        has_secret_supa_anon = False
+    try:
+        has_secret_stripe_secret = bool(st.secrets.get("STRIPE_SECRET"))
+    except Exception:
+        has_secret_stripe_secret = False
+    try:
+        has_secret_stripe_price = bool(st.secrets.get("STRIPE_PRICE_ID"))
+    except Exception:
+        has_secret_stripe_price = False
+
+    env_has_supa_url = bool(os.environ.get("SUPA_URL"))
+    env_has_supa_anon = bool(os.environ.get("SUPA_ANON"))
+    env_has_stripe_secret = bool(os.environ.get("STRIPE_SECRET"))
+    env_has_stripe_price = bool(os.environ.get("STRIPE_PRICE_ID"))
+
+    with st.expander("設定診断 (値は表示しません)"):
+        st.write("SUPA_URL:", "found (secrets)" if has_secret_supa_url else ("found (env)" if env_has_supa_url else "missing"))
+        st.write("SUPA_ANON:", "found (secrets)" if has_secret_supa_anon else ("found (env)" if env_has_supa_anon else "missing"))
+        st.write("STRIPE_SECRET:", "found (secrets)" if has_secret_stripe_secret else ("found (env)" if env_has_stripe_secret else "missing"))
+        st.write("STRIPE_PRICE_ID:", "found (secrets)" if has_secret_stripe_price else ("found (env)" if env_has_stripe_price else "missing"))
+
     if supabase is None:
-        # Diagnostic helper (do not print secret values)
-        has_secret_url = False
-        has_secret_key = False
-        try:
-            has_secret_url = bool(st.secrets.get("SUPA_URL"))
-            has_secret_key = bool(st.secrets.get("SUPA_ANON"))
-        except Exception:
-            pass
-        env_has_url = bool(os.environ.get("SUPA_URL"))
-        env_has_key = bool(os.environ.get("SUPA_ANON"))
-
-        msgs = []
-        if has_secret_url or env_has_url:
-            msgs.append("SUPA_URL: found")
-        else:
-            msgs.append("SUPA_URL: missing")
-        if has_secret_key or env_has_key:
-            msgs.append("SUPA_ANON: found")
-        else:
-            msgs.append("SUPA_ANON: missing")
-
         st.write("Supabase not configured.")
-        with st.expander("Supabase 診断情報 (値は表示しません)"):
-            for m in msgs:
-                st.write(m)
     else:
         auth_mode = st.radio("Auth", ("Login", "Sign up", "Logout"))
         if auth_mode == "Sign up":

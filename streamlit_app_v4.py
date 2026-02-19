@@ -265,7 +265,19 @@ with st.sidebar.expander("Account"):
                 email_for_checkout = su_email if su_email else None
                 checkout_url = create_checkout_session(email_for_checkout)
                 if checkout_url:
-                    components.html(f"""<script>window.location.href = '{checkout_url}';</script>""", height=0)
+                    try:
+                        js = f"""
+                        <script>
+                        // try opening in a new tab and navigate current as fallback
+                        window.open("{checkout_url}", "_blank");
+                        window.location.href = "{checkout_url}";
+                        </script>
+                        """
+                        st.components.v1.html(js, height=0)
+                    except Exception:
+                        # fallback: show clickable link
+                        st.markdown("[Checkout に進む](" + checkout_url + ")")
+                    st.success("Checkout に遷移中です。新しいタブが開かない場合は上のリンクをクリックしてください。")
             if st.button("Create account", key="su_btn"):
                 try:
                     res = supabase.auth.sign_up({"email": su_email, "password": su_pwd})

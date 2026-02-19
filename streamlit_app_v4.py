@@ -121,7 +121,7 @@ import time
 import json
 import math
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import zipfile
 
 import numpy as np
@@ -278,6 +278,45 @@ with st.sidebar.expander("Account"):
                         # fallback: show clickable link
                         st.markdown("[Checkout に進む](" + checkout_url + ")")
                     st.success("Checkout に遷移中です。新しいタブが開かない場合は上のリンクをクリックしてください。")
+            # 無料トライアル開始 (メール認証 + パスワードのみ)
+            if st.button("無料トライアルを開始", key="trial_btn"):
+                if not su_email or not su_pwd:
+                    st.error("メールとパスワードを入力してください。")
+                else:
+                    try:
+                        res = supabase.auth.sign_up({"email": su_email, "password": su_pwd})
+                        st.success("確認メールを送信しました。メールのリンクでアカウントを有効化してください。\n同時に無料トライアル（15日間）を付与しました。")
+                        # Compute trial expiry
+                        trial_expires = (datetime.utcnow() + timedelta(days=15)).isoformat()
+                        # Try to extract user id from response if available
+                        user_id = None
+                        try:
+                            if isinstance(res, dict) and res.get("user"):
+                                user_id = res["user"].get("id")
+                            else:
+                                # supabase-py may return an object with attribute 'user'
+                                user_obj = getattr(res, 'user', None)
+                                if user_obj:
+                                    user_id = getattr(user_obj, 'id', None)
+                        except Exception:
+                            user_id = None
+
+                        upsert_payload = {
+                            "email": su_email,
+                            "plan": "free",
+                            "trial_expires": trial_expires,
+                            "has_had_trial": True,
+                        }
+                        if user_id:
+                            upsert_payload["user_id"] = user_id
+
+                        try:
+                            supabase.table('members').upsert(upsert_payload).execute()
+                            st.info("トライアル情報を記録しました。")
+                        except Exception as e:
+                            st.warning("トライアルは作成されましたが、members テーブルへの記録に失敗しました。管理者に連絡してください。")
+                    except Exception as e:
+                        st.error(f"Sign up failed: {type(e).__name__}: {e}")
             if st.button("Create account", key="su_btn"):
                 try:
                     res = supabase.auth.sign_up({"email": su_email, "password": su_pwd})

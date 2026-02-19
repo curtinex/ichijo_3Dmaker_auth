@@ -197,6 +197,14 @@ def create_checkout_session(email=None):
 
     stripe.api_key = secret
 
+    # Quick validation: user often supplies a product (prod_...) instead of a price (price_...)
+    if not str(price_id).startswith("price_"):
+        if str(price_id).startswith("prod_") or str(price_id).startswith("product_"):
+            st.error("指定された ID は product（prod_...）のように見えます。Checkout には Price（price_...）の ID を指定してください。Stripe ダッシュボード → Products → 価格（Price）から price_... の ID をコピーしてください。")
+        else:
+            st.error("STRIPE_PRICE_ID が price_... の形式ではありません。Stripe の Price ID（price_...）を確認してください。")
+        return None
+
     success_url = f"{base_url}/?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{base_url}/?canceled=1"
 

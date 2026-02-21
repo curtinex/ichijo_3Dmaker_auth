@@ -32,6 +32,9 @@ def upsert_member_by_email(email: Optional[str], payload: dict):
         logging.warning("Supabase client not configured; skipping upsert")
         return None
     try:
+        # Ensure email is present in payload when available so upsert sets it
+        if email and 'email' not in payload:
+            payload['email'] = email
         resp = supabase.table('members').upsert(payload).execute()
         logging.info(f"Upserted member {email}: {resp}")
         return resp
@@ -80,6 +83,15 @@ def handle_invoice_paid(invoice: dict):
     }
     if subscription_id:
         payload['stripe_subscription_id'] = subscription_id
+    # If invoice didn't include customer_email, try to lookup email by stripe_customer_id
+    if not email and supabase and customer_id:
+        try:
+            res = supabase.table('members').select('email').eq('stripe_customer_id', customer_id).limit(1).execute()
+            rows = res.get('data') if isinstance(res, dict) else getattr(res, 'data', None)
+            email = rows[0]['email'] if rows and len(rows) > 0 else None
+        except Exception:
+            logging.exception('Failed to lookup email by stripe_customer_id for invoice')
+
     upsert_member_by_email(email, payload)
 
 

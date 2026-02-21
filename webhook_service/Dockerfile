@@ -16,5 +16,5 @@ COPY . /app
 
 ENV PORT 5000
 
-# Use uvicorn to serve the FastAPI app
-CMD ["uvicorn", "webhook_fastapi:app", "--host", "0.0.0.0", "--port", "5000"]
+# Use uvicorn to serve the FastAPI app. Use shell form so $PORT is expanded at runtime
+CMD sh -c "uvicorn webhook_fastapi:app --host 0.0.0.0 --port $PORT"

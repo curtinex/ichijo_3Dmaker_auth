@@ -341,7 +341,42 @@ with st.sidebar.expander("Account"):
                     pass
                 st.session_state.pop('user', None)
                 st.success("ログアウトしました")
+# --- Handle post-checkout redirect: show paid status when returning from Stripe Checkout ---
+try:
+    params = st.experimental_get_query_params()
+    if 'session_id' in params:
+        session_id = params.get('session_id')[0]
+        secret, _, _ = get_stripe_config()
+        if secret:
+            try:
+                stripe.api_key = secret
+                session = stripe.checkout.Session.retrieve(session_id)
+                email = None
+                if session.get('customer_details'):
+                    email = session['customer_details'].get('email')
+                if not email and session.get('metadata'):
+                    email = session['metadata'].get('email')
 
+                subscription_id = session.get('subscription')
+                if subscription_id:
+                    try:
+                        sub = stripe.Subscription.retrieve(subscription_id)
+                        status = sub.get('status')
+                        st.success(f"支払いが確認されました。サブスクリプション状態: {status} — ようこそ、有料会員です。")
+                        if email:
+                            st.info(f"登録メール: {email}")
+                    except Exception as e:
+                        st.warning(f"サブスクリプション情報の取得に失敗しました: {type(e).__name__}: {e}")
+                else:
+                    st.info("Checkout は完了しました。サブスクリプション情報はまだ利用できません。Webhook による記録を数秒待ってからページを再読み込みしてください。")
+            except Exception as e:
+                st.warning(f"Checkout セッションの確認中にエラーが発生しました: {type(e).__name__}: {e}")
+        else:
+            st.info("Stripe のシークレットキーが設定されていないため、Checkout 結果を即時確認できません。Webhook の反映をお待ちください。")
+except Exception:
+    pass
+
+# ichijo_core から全モジュールをインポート（必須）
 # ichijo_core から全モジュールをインポート（必須）
 try:
     from ichijo_core.pdf_to_image import pdf_to_image

@@ -110,7 +110,24 @@ async def webhook(request: Request, stripe_signature: Optional[str] = Header(Non
             event = stripe.Webhook.construct_event(body, stripe_signature, STRIPE_WEBHOOK_SECRET)
         except Exception as e:
             logging.exception('⚠️ Webhook signature verification failed')
-            raise HTTPException(status_code=400, detail=str(e))
+            # Log signature header and a safe preview of the raw body to help debugging
+            try:
+                sig_preview = stripe_signature if stripe_signature else '<missing>'
+                body_preview = ''
+                try:
+                    # body may be bytes
+                    if isinstance(body, (bytes, bytearray)):
+                        body_preview = body.decode('utf-8', errors='replace')[:1000]
+                    else:
+                        body_preview = str(body)[:1000]
+                except Exception:
+                    body_preview = '<unprintable body>'
+                logging.info(f"Stripe-Signature header: {sig_preview}")
+                logging.info(f"Raw body preview (first 1000 chars): {body_preview}")
+            except Exception:
+                logging.exception('Failed to log webhook debug info')
+            # Return a generic 400 to Stripe (don't leak internal exception text)
+            raise HTTPException(status_code=400, detail="Webhook signature verification failed")
     else:
         try:
             event = await request.json()

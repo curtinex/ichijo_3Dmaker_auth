@@ -154,6 +154,45 @@ async def webhook(request: Request, stripe_signature: Optional[str] = Header(Non
         if event_type == 'checkout.session.completed':
             session = event['data']['object']
             handle_checkout_session(session)
+        elif event_type == 'customer.subscription.created':
+            sub = event['data']['object']
+            # Try to resolve email from subscription object or supabase via customer id
+            email = None
+            if sub.get('customer_email'):
+                email = sub.get('customer_email')
+            if not email and sub.get('metadata'):
+                email = sub['metadata'].get('email')
+            # Build payload
+            payload = {
+                'plan': 'paid',
+                'status': sub.get('status'),
+                'stripe_subscription_id': sub.get('id'),
+                'stripe_customer_id': sub.get('customer'),
+            }
+            # trial end or current_period_end
+            if sub.get('trial_end'):
+                try:
+                    dt = datetime.datetime.utcfromtimestamp(int(sub['trial_end']))
+                    payload['trial_expires'] = dt.isoformat()
+                except Exception:
+                    pass
+            elif sub.get('current_period_end'):
+                try:
+                    dt = datetime.datetime.utcfromtimestamp(int(sub['current_period_end']))
+                    payload['trial_expires'] = dt.isoformat()
+                except Exception:
+                    pass
+
+            # If no email, attempt lookup by customer id in supabase
+            if not email and supabase and sub.get('customer'):
+                try:
+                    res = supabase.table('members').select('email').eq('stripe_customer_id', sub.get('customer')).limit(1).execute()
+                    rows = res.get('data') if isinstance(res, dict) else getattr(res, 'data', None)
+                    email = rows[0]['email'] if rows and len(rows) > 0 else None
+                except Exception:
+                    logging.exception('Failed to lookup email by stripe_customer_id for subscription.created')
+
+            upsert_member_by_email(email, payload)
         elif event_type in ('invoice.payment_succeeded', 'invoice.paid'):
             invoice = event['data']['object']
             handle_invoice_paid(invoice)

@@ -32,3 +32,6 @@ create trigger set_updated_at
   before update on public.members
   for each row
   execute function public.trigger_set_updated_at();
+
+-- Ensure email uniqueness for non-null emails to allow upsert on email
+create unique index if not exists uniq_members_email_not_null on public.members (email) where email is not null;

@@ -216,9 +216,32 @@ def create_checkout_session(email=None):
             'line_items': [{"price": price_id, "quantity": 1}],
             'metadata': {"email": email} if email else None,
         }
-        # If we have an email from the form, ask Stripe to prefill it in Checkout
+        # If we have an email, prefill customer_email.
         if email:
             params['customer_email'] = email
+
+        # Decide whether to grant a 15-day trial. If Supabase is configured, check has_had_trial.
+        try:
+            supabase_client = get_supabase()
+        except Exception:
+            supabase_client = None
+
+        give_trial = False
+        if supabase_client and email:
+            try:
+                res = supabase_client.table('members').select('has_had_trial').eq('email', email).limit(1).execute()
+                rows = res.get('data') if isinstance(res, dict) else getattr(res, 'data', None)
+                if not rows or not rows[0].get('has_had_trial'):
+                    give_trial = True
+            except Exception:
+                # if lookup fails, do not assume trial
+                give_trial = False
+        else:
+            # If no supabase configured, do not auto grant trial to avoid accidental free periods
+            give_trial = False
+
+        if give_trial:
+            params['subscription_data'] = {'trial_period_days': 15}
 
         session = stripe.checkout.Session.create(**params)
         return session.url

@@ -209,13 +209,18 @@ def create_checkout_session(email=None):
     cancel_url = f"{base_url}/?canceled=1"
 
     try:
-        session = stripe.checkout.Session.create(
-            success_url=success_url,
-            cancel_url=cancel_url,
-            mode="subscription",
-            line_items=[{"price": price_id, "quantity": 1}],
-            metadata={"email": email} if email else None,
-        )
+        params = {
+            'success_url': success_url,
+            'cancel_url': cancel_url,
+            'mode': 'subscription',
+            'line_items': [{"price": price_id, "quantity": 1}],
+            'metadata': {"email": email} if email else None,
+        }
+        # If we have an email from the form, ask Stripe to prefill it in Checkout
+        if email:
+            params['customer_email'] = email
+
+        session = stripe.checkout.Session.create(**params)
         return session.url
     except Exception as e:
         st.error(f"Checkout セッション作成に失敗しました: {type(e).__name__}: {e}")
@@ -268,9 +273,8 @@ with st.sidebar.expander("Account"):
                     try:
                         js = f"""
                         <script>
-                        // try opening in a new tab and navigate current as fallback
+                        // Open Checkout in a new tab only
                         window.open("{checkout_url}", "_blank");
-                        window.location.href = "{checkout_url}";
                         </script>
                         """
                         st.components.v1.html(js, height=0)

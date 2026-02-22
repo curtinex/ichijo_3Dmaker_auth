@@ -250,31 +250,17 @@ def create_checkout_session(email=None):
 
 
 def _safe_rerun_or_stop():
-    """Try to rerun the Streamlit script; if unavailable, stop execution safely.
-
-    Some Streamlit versions do not expose `experimental_rerun`. Use `st.stop()`
-    as a fallback to safely end the current run after updating session state.
-    """
-    # Preferred: use experimental_rerun when available
-    try:
-        if hasattr(st, "experimental_rerun"):
-            return st.experimental_rerun()
-    except Exception:
-        pass
-
-    # Fallback: trigger a rerun by mutating query params (this causes Streamlit to re-execute)
-    try:
+    """Try to rerun the Streamlit script safely."""
+    if hasattr(st, "rerun"):
+        st.rerun()
+    elif hasattr(st, "experimental_rerun"):
+        st.experimental_rerun()
+    else:
         import time
-        # Use a short timestamp to ensure the value changes
-        st.experimental_set_query_params(_refresh=int(time.time() * 1000))
-        return None
-    except Exception:
-        pass
-
-    # Last resort: stop current run (may leave main area blank until user reloads)
-    # Do not call st.stop() as it can leave the main area blank in some hosts.
-    # If we reach here, fall back to doing nothing so the UI remains visible.
-    return None
+        if hasattr(st, "query_params"):
+            st.query_params["_refresh"] = str(int(time.time() * 1000))
+        else:
+            st.experimental_set_query_params(_refresh=int(time.time() * 1000))
 
 
 def _render_logged_in_sidebar(user_email, supabase):
@@ -457,16 +443,20 @@ with st.sidebar.expander("アカウント設定"):
             li_email = st.text_input("Email", key="li_email")
             li_pwd = st.text_input("Password", type="password", key="li_pwd")
             if st.button("ログイン", key="li_btn"):
+                login_success = False
                 try:
                     session = supabase.auth.sign_in_with_password({"email": li_email, "password": li_pwd})
                     st.session_state['user'] = session
                     # Hide login form on subsequent render
                     st.session_state['hide_login_form'] = True
                     st.success("ログインしました")
-                    # Trigger a safe rerun so the sidebar re-reads session_state and hides the login form
-                    _safe_rerun_or_stop()
+                    login_success = True
                 except Exception as e:
                     st.error(f"Login failed: {type(e).__name__}: {e}")
+                
+                if login_success:
+                    # Trigger a safe rerun so the sidebar re-reads session_state and hides the login form
+                    _safe_rerun_or_stop()
         else:
             # No-op when not logged in (logout handled in logged-in branch)
             pass

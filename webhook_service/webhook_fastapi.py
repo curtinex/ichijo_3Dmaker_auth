@@ -6,6 +6,8 @@ from typing import Optional
 import stripe
 from fastapi import FastAPI, Request, Header, HTTPException
 from fastapi.responses import JSONResponse
+import requests
+import secrets
 
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
@@ -68,6 +70,39 @@ def handle_checkout_session(session: dict):
                 payload['trial_expires'] = dt.isoformat()
         except Exception:
             logging.exception('Failed to retrieve subscription')
+
+    # Ensure Supabase auth user exists (create via admin API if necessary)
+    if supabase and email and SUPA_URL and SUPA_SERVICE_ROLE:
+        try:
+            # Check members table for existing user_id
+            try:
+                res = supabase.table('members').select('user_id').eq('email', email).limit(1).execute()
+                rows = res.get('data') if isinstance(res, dict) else getattr(res, 'data', None)
+                existing_user_id = rows[0].get('user_id') if rows and len(rows) > 0 else None
+            except Exception:
+                existing_user_id = None
+
+            if not existing_user_id:
+                # Create a Supabase auth user via admin endpoint
+                admin_url = SUPA_URL.rstrip('/') + '/auth/v1/admin/users'
+                rand_pw = secrets.token_urlsafe(16)
+                headers = {
+                    'apikey': SUPA_SERVICE_ROLE,
+                    'Authorization': f'Bearer {SUPA_SERVICE_ROLE}',
+                    'Content-Type': 'application/json'
+                }
+                body = {'email': email, 'password': rand_pw, 'email_confirm': True}
+                try:
+                    r = requests.post(admin_url, json=body, headers=headers, timeout=10)
+                    if r.status_code in (200, 201):
+                        j = r.json()
+                        uid = j.get('id') or j.get('user', {}).get('id')
+                        if uid:
+                            payload['user_id'] = uid
+                    else:
+                        logging.warning(f"Supabase admin user create returned {r.status_code}: {r.text[:200]}")
+                except Exception:
+                    logging.exception('Failed to call Supabase admin API')
 
     upsert_member_by_email(email, payload)
 

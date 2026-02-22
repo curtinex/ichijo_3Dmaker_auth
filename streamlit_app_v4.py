@@ -255,17 +255,29 @@ def _safe_rerun_or_stop():
     Some Streamlit versions do not expose `experimental_rerun`. Use `st.stop()`
     as a fallback to safely end the current run after updating session state.
     """
+    # Preferred: use experimental_rerun when available
     try:
         if hasattr(st, "experimental_rerun"):
             return st.experimental_rerun()
     except Exception:
         pass
+
+    # Fallback: trigger a rerun by mutating query params (this causes Streamlit to re-execute)
+    try:
+        import time
+        # Use a short timestamp to ensure the value changes
+        st.experimental_set_query_params(_refresh=int(time.time() * 1000))
+        return None
+    except Exception:
+        pass
+
+    # Last resort: stop current run (may leave main area blank until user reloads)
     try:
         return st.stop()
     except Exception:
         return None
 
-with st.sidebar.expander("Account"):
+with st.sidebar.expander("アカウント設定"):
     supabase = get_supabase()
 
     # Always show diagnostics (do not display secret values)
@@ -344,8 +356,8 @@ with st.sidebar.expander("Account"):
                 st.session_state.pop('user', None)
                 _safe_rerun_or_stop()
         else:
-            auth_mode = st.radio("Auth", ("Login", "Sign up"))
-        if auth_mode == "Sign up":
+            auth_mode = st.radio("Auth", ("ログイン", "会員登録"))
+        if auth_mode == "会員登録":
             su_email = st.text_input("Email", key="su_email")
             su_pwd = st.text_input("Password", type="password", key="su_pwd")
             if st.button("有料プランに登録", key="pay_btn"):
@@ -410,10 +422,10 @@ with st.sidebar.expander("Account"):
                     st.success("確認メールを送信しました。メールのリンクでアカウントを有効化してください。")
                 except Exception as e:
                     st.error(f"Sign up failed: {type(e).__name__}: {e}")
-        elif auth_mode == "Login":
+        elif auth_mode == "ログイン":
             li_email = st.text_input("Email", key="li_email")
             li_pwd = st.text_input("Password", type="password", key="li_pwd")
-            if st.button("Login", key="li_btn"):
+            if st.button("ログイン", key="li_btn"):
                 try:
                     session = supabase.auth.sign_in_with_password({"email": li_email, "password": li_pwd})
                     st.session_state['user'] = session

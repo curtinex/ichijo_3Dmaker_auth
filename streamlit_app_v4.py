@@ -276,6 +276,43 @@ def _safe_rerun_or_stop():
     # If we reach here, fall back to doing nothing so the UI remains visible.
     return None
 
+
+def _render_logged_in_sidebar(user_email, supabase):
+    """Render the logged-in view in the sidebar and handle logout/pay actions.
+
+    Returns True if the user was logged out by this handler, else False.
+    """
+    st.write(f"ログイン中: {user_email or '（不明なユーザー）'}")
+    if st.button("有料登録", key="pay_btn_logged_in"):
+        checkout_url = create_checkout_session(user_email)
+        if checkout_url:
+            try:
+                js = f"""
+                <script>
+                window.open("{checkout_url}", "_blank");
+                </script>
+                """
+                st.components.v1.html(js, height=0)
+            except Exception:
+                st.markdown("[Checkout に進む](" + checkout_url + ")")
+            st.success("Checkout に遷移中です。新しいタブが開かない場合は上のリンクをクリックしてください。")
+
+    if st.button("ログアウト", key="sidebar_logout_btn"):
+        try:
+            supabase.auth.sign_out()
+        except Exception:
+            pass
+        st.session_state.pop('user', None)
+        st.success("ログアウトしました")
+        return True
+
+    return False
+
+
+def _render_auth_ui():
+    """Render the auth radio and return chosen auth_mode string."""
+    return st.radio("Auth", ("ログイン", "会員登録"))
+
 with st.sidebar.expander("アカウント設定"):
     supabase = get_supabase()
 
@@ -332,28 +369,13 @@ with st.sidebar.expander("アカウント設定"):
                 user_email = None
 
         if user_session:
-            st.write(f"ログイン中: {user_email or '（不明なユーザー）'}")
-            if st.button("有料登録", key="pay_btn_logged_in"):
-                checkout_url = create_checkout_session(user_email)
-                if checkout_url:
-                    try:
-                        js = f"""
-                        <script>
-                        window.open("{checkout_url}", "_blank");
-                        </script>
-                        """
-                        st.components.v1.html(js, height=0)
-                    except Exception:
-                        st.markdown("[Checkout に進む](" + checkout_url + ")")
-                    st.success("Checkout に遷移中です。新しいタブが開かない場合は上のリンクをクリックしてください。")
-
-            if st.button("ログアウト", key="sidebar_logout_btn"):
-                try:
-                    supabase.auth.sign_out()
-                except Exception:
-                    pass
-                st.session_state.pop('user', None)
-                _safe_rerun_or_stop()
+            # Render logged-in sidebar via helper
+            was_logged_out = _render_logged_in_sidebar(user_email, supabase)
+            if was_logged_out:
+                # user just logged out, present auth UI
+                auth_mode = _render_auth_ui()
+            else:
+                auth_mode = None
         else:
             auth_mode = st.radio("Auth", ("ログイン", "会員登録"))
         if auth_mode == "会員登録":
@@ -429,8 +451,18 @@ with st.sidebar.expander("アカウント設定"):
                     session = supabase.auth.sign_in_with_password({"email": li_email, "password": li_pwd})
                     st.session_state['user'] = session
                     st.success("ログインしました")
-                    # Immediately refresh UI so sidebar shows logged-in state
-                    _safe_rerun_or_stop()
+                    # Try to extract email and render logged-in UI immediately
+                    try:
+                        if isinstance(session, dict) and session.get('user'):
+                            user_obj = session.get('user')
+                            email_for_ui = user_obj.get('email') or user_obj.get('user_metadata', {}).get('email')
+                        else:
+                            user_obj = getattr(session, 'user', None)
+                            email_for_ui = getattr(user_obj, 'email', None) if user_obj else li_email
+                    except Exception:
+                        email_for_ui = li_email
+
+                    _render_logged_in_sidebar(email_for_ui, supabase)
                 except Exception as e:
                     st.error(f"Login failed: {type(e).__name__}: {e}")
         else:

@@ -248,6 +248,23 @@ def create_checkout_session(email=None):
         st.error(f"Checkout セッション作成に失敗しました: {type(e).__name__}: {e}")
         return None
 
+
+def _safe_rerun_or_stop():
+    """Try to rerun the Streamlit script; if unavailable, stop execution safely.
+
+    Some Streamlit versions do not expose `experimental_rerun`. Use `st.stop()`
+    as a fallback to safely end the current run after updating session state.
+    """
+    try:
+        if hasattr(st, "experimental_rerun"):
+            return st.experimental_rerun()
+    except Exception:
+        pass
+    try:
+        return st.stop()
+    except Exception:
+        return None
+
 with st.sidebar.expander("Account"):
     supabase = get_supabase()
 
@@ -325,7 +342,7 @@ with st.sidebar.expander("Account"):
                 except Exception:
                     pass
                 st.session_state.pop('user', None)
-                st.experimental_rerun()
+                _safe_rerun_or_stop()
         else:
             auth_mode = st.radio("Auth", ("Login", "Sign up"))
         if auth_mode == "Sign up":
@@ -402,7 +419,7 @@ with st.sidebar.expander("Account"):
                     st.session_state['user'] = session
                     st.success("ログインしました")
                     # Immediately refresh UI so sidebar shows logged-in state
-                    st.experimental_rerun()
+                    _safe_rerun_or_stop()
                 except Exception as e:
                     st.error(f"Login failed: {type(e).__name__}: {e}")
         else:

@@ -463,7 +463,7 @@ with st.sidebar.expander("アカウント設定"):
                     # Hide login form on subsequent render
                     st.session_state['hide_login_form'] = True
                     st.success("ログインしました")
-                    # Try to extract email and render logged-in UI immediately in same run
+                    # Try to extract email for logging/UI (best-effort)
                     try:
                         if isinstance(session, dict) and session.get('user'):
                             user_obj = session.get('user')
@@ -474,7 +474,8 @@ with st.sidebar.expander("アカウント設定"):
                     except Exception:
                         email_for_ui = li_email
 
-                    _render_logged_in_sidebar(email_for_ui, supabase)
+                    # Trigger a safe rerun so the sidebar re-reads session_state and hides the auth form
+                    _safe_rerun_or_stop()
                 except Exception as e:
                     st.error(f"Login failed: {type(e).__name__}: {e}")
         else:

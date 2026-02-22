@@ -272,10 +272,9 @@ def _safe_rerun_or_stop():
         pass
 
     # Last resort: stop current run (may leave main area blank until user reloads)
-    try:
-        return st.stop()
-    except Exception:
-        return None
+    # Do not call st.stop() as it can leave the main area blank in some hosts.
+    # If we reach here, fall back to doing nothing so the UI remains visible.
+    return None
 
 with st.sidebar.expander("アカウント設定"):
     supabase = get_supabase()

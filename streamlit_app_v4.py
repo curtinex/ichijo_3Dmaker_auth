@@ -284,6 +284,7 @@ with st.sidebar.expander("Account"):
         st.write("Supabase not configured.")
     else:
         # If a session/user was set earlier, show logged-in view first
+        auth_mode = None
         user_session = st.session_state.get('user') if 'user' in st.session_state else None
         user_email = None
         if user_session:

@@ -306,7 +306,7 @@ def _render_logged_in_sidebar(user_email, supabase):
         # ensure login form is shown after logout
         st.session_state['hide_login_form'] = False
         st.success("ログアウトしました")
-        _safe_rerun_or_stop()
+        #_safe_rerun_or_stop()
         return True
 
     return False
@@ -475,7 +475,6 @@ with st.sidebar.expander("アカウント設定"):
                         email_for_ui = li_email
 
                     _render_logged_in_sidebar(email_for_ui, supabase)
-                    _safe_rerun_or_stop()
                 except Exception as e:
                     st.error(f"Login failed: {type(e).__name__}: {e}")
         else:

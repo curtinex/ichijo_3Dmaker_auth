@@ -377,25 +377,9 @@ with st.sidebar.expander("アカウント設定"):
         if auth_mode == "会員登録":
             su_email = st.text_input("Email", key="su_email")
             su_pwd = st.text_input("Password", type="password", key="su_pwd")
-            if st.button("有料プランに登録", key="pay_btn"):
-                # 有料プラン用のCheckoutセッションを作成してリダイレクト
-                email_for_checkout = su_email if su_email else None
-                checkout_url = create_checkout_session(email_for_checkout)
-                if checkout_url:
-                    try:
-                        js = f"""
-                        <script>
-                        // Open Checkout in a new tab only
-                        window.open("{checkout_url}", "_blank");
-                        </script>
-                        """
-                        st.components.v1.html(js, height=0)
-                    except Exception:
-                        # fallback: show clickable link
-                        st.markdown("[Checkout に進む](" + checkout_url + ")")
-                    st.success("Checkout に遷移中です。新しいタブが開かない場合は上のリンクをクリックしてください。")
-            # 無料トライアル開始 (メール認証 + パスワードのみ)
-            if st.button("無料トライアルを開始", key="trial_btn"):
+            
+            # 会員登録して無料トライアルを開始 (メール認証 + パスワードのみ)
+            if st.button("会員登録して無料トライアルを開始", key="trial_btn"):
                 if not su_email or not su_pwd:
                     st.error("メールとパスワードを入力してください。")
                 else:
@@ -433,12 +417,6 @@ with st.sidebar.expander("アカウント設定"):
                             st.warning("トライアルは作成されましたが、members テーブルへの記録に失敗しました。管理者に連絡してください。")
                     except Exception as e:
                         st.error(f"Sign up failed: {type(e).__name__}: {e}")
-            if st.button("Create account", key="su_btn"):
-                try:
-                    res = supabase.auth.sign_up({"email": su_email, "password": su_pwd})
-                    st.success("確認メールを送信しました。メールのリンクでアカウントを有効化してください。")
-                except Exception as e:
-                    st.error(f"Sign up failed: {type(e).__name__}: {e}")
         elif auth_mode == "ログイン":
             li_email = st.text_input("Email", key="li_email")
             li_pwd = st.text_input("Password", type="password", key="li_pwd")

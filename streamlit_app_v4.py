@@ -182,148 +182,37 @@ def get_stripe_config():
     try:
         base = st.secrets.get("APP_BASE_URL")
     except Exception:
-        if supabase is None:
-            st.write("Supabase not configured.")
+        base = None
+    if not base:
+        base = os.environ.get("APP_BASE_URL", "http://localhost:8501")
+
+    return secret, price, base
+
+def create_checkout_session(email=None):
+    secret, price_id, base_url = get_stripe_config()
+    if not secret or not price_id:
+        st.error("Stripe が設定されていません。STRIPE_SECRET と STRIPE_PRICE_ID を Streamlit secrets か環境変数で設定してください。")
+        return None
+
+    stripe.api_key = secret
+
+    # Quick validation: user often supplies a product (prod_...) instead of a price (price_...)
+    if not str(price_id).startswith("price_"):
+        if str(price_id).startswith("prod_") or str(price_id).startswith("product_"):
+            st.error("指定された ID は product（prod_...）のように見えます。Checkout には Price（price_...）の ID を指定してください。Stripe ダッシュボード → Products → 価格（Price）から price_... の ID をコピーしてください。")
         else:
-            # Session-state based simple auth UI
-            if 'logged_in' not in st.session_state:
-                st.session_state.logged_in = False
-            if 'user_email' not in st.session_state:
-                st.session_state.user_email = None
+            st.error("STRIPE_PRICE_ID が price_... の形式ではありません。Stripe の Price ID（price_...）を確認してください。")
+        return None
 
-            st.write("**会員認証**")
-            # Email / Password inputs (always visible)
-            input_email = st.text_input("Email", key="sidebar_email", value=(st.session_state.user_email or ""))
-            input_pwd = st.text_input("Password", type="password", key="sidebar_pwd")
+    success_url = f"{base_url}/?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{base_url}/?canceled=1"
 
-            if not st.session_state.logged_in:
-                # Show sign-up and login buttons
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("無料登録", key="free_signup_btn"):
-                        if not input_email or not input_pwd:
-                            st.error("Email と Password を入力してください。")
-                        else:
-                            try:
-                                # Try sign up (supporting multiple supabase-py versions)
-                                try:
-                                    res = supabase.auth.sign_up({"email": input_email, "password": input_pwd})
-                                except Exception:
-                                    # newer API
-                                    res = supabase.auth.sign_up(email=input_email, password=input_pwd)
-
-                                # Basic success check
-                                if (isinstance(res, dict) and res.get('error')) or (hasattr(res, 'get') and res.get('error')):
-                                    err = res.get('error') if isinstance(res, dict) else getattr(res, 'error', None)
-                                    st.error(f"無料登録に失敗しました: {err}")
-                                else:
-                                    st.success("無料登録が完了しました。ログイン状態で有料登録が可能です。")
-                                    st.session_state.logged_in = True
-                                    st.session_state.user_email = input_email
-                                    # Upsert member as free trial (15 days)
-                                    try:
-                                        trial_until = (datetime.utcnow() + timedelta(days=15)).isoformat()
-                                        member = {
-                                            'email': input_email,
-                                            'plan': 'free',
-                                            'trial_expires': trial_until,
-                                            'has_had_trial': True,
-                                            'status': 'active'
-                                        }
-                                        supabase.table('members').upsert(member).execute()
-                                    except Exception:
-                                        pass
-                            except Exception as e:
-                                st.error(f"無料登録中にエラーが発生しました: {type(e).__name__}: {e}")
-                with col2:
-                    if st.button("ログイン", key="sidebar_login_btn"):
-                        if not input_email or not input_pwd:
-                            st.error("Email と Password を入力してください。")
-                        else:
-                            try:
-                                try:
-                                    login_res = supabase.auth.sign_in_with_password({"email": input_email, "password": input_pwd})
-                                except Exception:
-                                    # older/newer variants
-                                    try:
-                                        login_res = supabase.auth.sign_in(email=input_email, password=input_pwd)
-                                    except Exception:
-                                        login_res = supabase.auth.sign_in_with_password(email=input_email, password=input_pwd)
-
-                                # check success
-                                if isinstance(login_res, dict) and login_res.get('error'):
-                                    st.error(f"Login failed: {login_res.get('error')}")
-                                else:
-                                    st.success("ログインしました。")
-                                    st.session_state.logged_in = True
-                                    st.session_state.user_email = input_email
-                            except Exception as e:
-                                st.error(f"Login error: {type(e).__name__}: {e}")
-
-            else:
-                # Logged-in view: show paid-register, cancel, and logout
-                st.write(f"ログイン中: {st.session_state.user_email}")
-
-                # Try to load member record to obtain subscription id/status
-                member = None
-                try:
-                    res = supabase.table('members').select('*').eq('email', st.session_state.user_email).limit(1).execute()
-                    rows = res.get('data') if isinstance(res, dict) else getattr(res, 'data', None)
-                    if rows:
-                        member = rows[0]
-                except Exception:
-                    member = None
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("有料登録", key="pay_btn_logged_in"):
-                        checkout_url = create_checkout_session(st.session_state.user_email)
-                        if checkout_url:
-                            st.markdown(f"[Checkout に進む]({checkout_url})", unsafe_allow_html=True)
-
-                with col2:
-                    # Show cancel button only if we have a subscription id
-                    sub_id = None
-                    if member:
-                        sub_id = member.get('stripe_subscription_id') or member.get('subscription_id')
-
-                    if sub_id:
-                        if st.button("解約", key="cancel_btn"):
-                            secret, _, _ = get_stripe_config()
-                            if not secret:
-                                st.error("Stripe のシークレットキーが設定されていません。解約できません。")
-                            else:
-                                try:
-                                    stripe.api_key = secret
-                                    # Cancel immediately
-                                    stripe.Subscription.delete(sub_id)
-                                    st.success("サブスクリプションを解約しました。")
-                                    # Update Supabase member record
-                                    try:
-                                        supabase.table('members').update({
-                                            'status': 'cancelled',
-                                            'plan': 'free',
-                                            'stripe_subscription_id': None
-                                        }).eq('email', st.session_state.user_email).execute()
-                                    except Exception:
-                                        pass
-                                except Exception as e:
-                                    st.error(f"解約に失敗しました: {type(e).__name__}: {e}")
-
-                    else:
-                        st.write("サブスクリプション情報が見つかりません。")
-
-                # Logout button
-                if st.button("ログアウト", key="logout_btn"):
-                    try:
-                        try:
-                            supabase.auth.sign_out()
-                        except Exception:
-                            pass
-                    finally:
-                        st.session_state.logged_in = False
-                        st.session_state.user_email = None
-                        st.experimental_rerun()
+    try:
+        params = {
+            'success_url': success_url,
+            'cancel_url': cancel_url,
+            'mode': 'subscription',
+            'line_items': [{"price": price_id, "quantity": 1}],
             'metadata': {"email": email} if email else None,
         }
         # If we have an email, prefill customer_email.

@@ -283,7 +283,50 @@ with st.sidebar.expander("Account"):
     if supabase is None:
         st.write("Supabase not configured.")
     else:
-        auth_mode = st.radio("Auth", ("Login", "Sign up", "Logout"))
+        # If a session/user was set earlier, show logged-in view first
+        user_session = st.session_state.get('user') if 'user' in st.session_state else None
+        user_email = None
+        if user_session:
+            try:
+                if isinstance(user_session, dict):
+                    user_obj = user_session.get('user') or user_session
+                    if isinstance(user_obj, dict):
+                        user_email = user_obj.get('email') or user_obj.get('user_metadata', {}).get('email')
+                    else:
+                        user_email = getattr(user_obj, 'email', None)
+                else:
+                    # some supabase clients return objects
+                    user_obj = getattr(user_session, 'user', None)
+                    if user_obj:
+                        user_email = getattr(user_obj, 'email', None)
+            except Exception:
+                user_email = None
+
+        if user_session:
+            st.write(f"ログイン中: {user_email or '（不明なユーザー）'}")
+            if st.button("有料登録", key="pay_btn_logged_in"):
+                checkout_url = create_checkout_session(user_email)
+                if checkout_url:
+                    try:
+                        js = f"""
+                        <script>
+                        window.open("{checkout_url}", "_blank");
+                        </script>
+                        """
+                        st.components.v1.html(js, height=0)
+                    except Exception:
+                        st.markdown("[Checkout に進む](" + checkout_url + ")")
+                    st.success("Checkout に遷移中です。新しいタブが開かない場合は上のリンクをクリックしてください。")
+
+            if st.button("ログアウト", key="sidebar_logout_btn"):
+                try:
+                    supabase.auth.sign_out()
+                except Exception:
+                    pass
+                st.session_state.pop('user', None)
+                st.experimental_rerun()
+        else:
+            auth_mode = st.radio("Auth", ("Login", "Sign up", "Logout"))
         if auth_mode == "Sign up":
             su_email = st.text_input("Email", key="su_email")
             su_pwd = st.text_input("Password", type="password", key="su_pwd")

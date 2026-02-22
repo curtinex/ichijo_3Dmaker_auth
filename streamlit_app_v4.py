@@ -306,7 +306,7 @@ def _render_logged_in_sidebar(user_email, supabase):
         # ensure login form is shown after logout
         st.session_state['hide_login_form'] = False
         st.success("ログアウトしました")
-        #_safe_rerun_or_stop()
+        _safe_rerun_or_stop()
         return True
 
     return False
@@ -463,18 +463,8 @@ with st.sidebar.expander("アカウント設定"):
                     # Hide login form on subsequent render
                     st.session_state['hide_login_form'] = True
                     st.success("ログインしました")
-                    # Try to extract email and render logged-in UI immediately in same run
-                    try:
-                        if isinstance(session, dict) and session.get('user'):
-                            user_obj = session.get('user')
-                            email_for_ui = user_obj.get('email') or user_obj.get('user_metadata', {}).get('email')
-                        else:
-                            user_obj = getattr(session, 'user', None)
-                            email_for_ui = getattr(user_obj, 'email', None) if user_obj else li_email
-                    except Exception:
-                        email_for_ui = li_email
-
-                    _render_logged_in_sidebar(email_for_ui, supabase)
+                    # Trigger a safe rerun so the sidebar re-reads session_state and hides the login form
+                    _safe_rerun_or_stop()
                 except Exception as e:
                     st.error(f"Login failed: {type(e).__name__}: {e}")
         else:

@@ -456,12 +456,12 @@ with st.sidebar.expander("アカウント設定"):
             if st.button("ログイン", key="li_btn"):
                 try:
                     session = supabase.auth.sign_in_with_password({"email": li_email, "password": li_pwd})
-                        st.session_state['user'] = session
-                        # Hide login form on subsequent render
-                        st.session_state['hide_login_form'] = True
-                        st.success("ログインしました")
-                        # trigger a rerun so sidebar displays logged-in UI only
-                        _safe_rerun_or_stop()
+                    st.session_state['user'] = session
+                    # Hide login form on subsequent render
+                    st.session_state['hide_login_form'] = True
+                    st.success("ログインしました")
+                    # trigger a rerun so sidebar displays logged-in UI only
+                    _safe_rerun_or_stop()
                 except Exception as e:
                     st.error(f"Login failed: {type(e).__name__}: {e}")
         else:

@@ -459,22 +459,22 @@ with st.sidebar.expander("アカウント設定"):
             if st.button("ログイン", key="li_btn"):
                 try:
                     session = supabase.auth.sign_in_with_password({"email": li_email, "password": li_pwd})
-                        st.session_state['user'] = session
-                        # Hide login form on subsequent render
-                        st.session_state['hide_login_form'] = True
-                        st.success("ログインしました")
-                        # Try to extract email and render logged-in UI immediately in same run
-                        try:
-                            if isinstance(session, dict) and session.get('user'):
-                                user_obj = session.get('user')
-                                email_for_ui = user_obj.get('email') or user_obj.get('user_metadata', {}).get('email')
-                            else:
-                                user_obj = getattr(session, 'user', None)
-                                email_for_ui = getattr(user_obj, 'email', None) if user_obj else li_email
-                        except Exception:
-                            email_for_ui = li_email
+                    st.session_state['user'] = session
+                    # Hide login form on subsequent render
+                    st.session_state['hide_login_form'] = True
+                    st.success("ログインしました")
+                    # Try to extract email and render logged-in UI immediately in same run
+                    try:
+                        if isinstance(session, dict) and session.get('user'):
+                            user_obj = session.get('user')
+                            email_for_ui = user_obj.get('email') or user_obj.get('user_metadata', {}).get('email')
+                        else:
+                            user_obj = getattr(session, 'user', None)
+                            email_for_ui = getattr(user_obj, 'email', None) if user_obj else li_email
+                    except Exception:
+                        email_for_ui = li_email
 
-                        _render_logged_in_sidebar(email_for_ui, supabase)
+                    _render_logged_in_sidebar(email_for_ui, supabase)
                 except Exception as e:
                     st.error(f"Login failed: {type(e).__name__}: {e}")
         else:

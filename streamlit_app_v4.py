@@ -327,7 +327,7 @@ with st.sidebar.expander("Account"):
                 st.session_state.pop('user', None)
                 st.experimental_rerun()
         else:
-            auth_mode = st.radio("Auth", ("Login", "Sign up", "Logout"))
+            auth_mode = st.radio("Auth", ("Login", "Sign up", "ログアウト"))
         if auth_mode == "Sign up":
             su_email = st.text_input("Email", key="su_email")
             su_pwd = st.text_input("Password", type="password", key="su_pwd")
@@ -404,7 +404,7 @@ with st.sidebar.expander("Account"):
                 except Exception as e:
                     st.error(f"Login failed: {type(e).__name__}: {e}")
         else:
-            if st.button("Logout", key="lo_btn"):
+            if st.button("ログアウト", key="lo_btn"):
                 try:
                     supabase.auth.sign_out()
                 except Exception:

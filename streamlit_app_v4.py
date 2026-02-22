@@ -327,7 +327,7 @@ with st.sidebar.expander("Account"):
                 st.session_state.pop('user', None)
                 st.experimental_rerun()
         else:
-            auth_mode = st.radio("Auth", ("Login", "Sign up", "ログアウト"))
+            auth_mode = st.radio("Auth", ("Login", "Sign up"))
         if auth_mode == "Sign up":
             su_email = st.text_input("Email", key="su_email")
             su_pwd = st.text_input("Password", type="password", key="su_pwd")
@@ -401,16 +401,13 @@ with st.sidebar.expander("Account"):
                     session = supabase.auth.sign_in_with_password({"email": li_email, "password": li_pwd})
                     st.session_state['user'] = session
                     st.success("ログインしました")
+                    # Immediately refresh UI so sidebar shows logged-in state
+                    st.experimental_rerun()
                 except Exception as e:
                     st.error(f"Login failed: {type(e).__name__}: {e}")
         else:
-            if st.button("ログアウト", key="lo_btn"):
-                try:
-                    supabase.auth.sign_out()
-                except Exception:
-                    pass
-                st.session_state.pop('user', None)
-                st.success("ログアウトしました")
+            # No-op when not logged in (logout handled in logged-in branch)
+            pass
 # --- Handle post-checkout redirect: show paid status when returning from Stripe Checkout ---
 try:
     params = st.experimental_get_query_params()
@@ -3394,9 +3391,8 @@ def main():
                         # モード別の説明メッセージ
                         #if edit_mode == "線を追加":
                             #st.write("💡 追加したい壁の端点2点を指定してください")
-                        #else:
-                            #st.write("💡 画像をクリックして四角形の対角線上の2点を指定してください")
-                            #st.stop()
+                        else:
+                            pass
                         
                         # 窓追加モードで2点選択完了時：壁検出結果をハイライト表示（線を結合モードは除外）
                         if edit_mode == "窓を追加" and len(st.session_state.rect_coords) == 2:

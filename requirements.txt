@@ -9,6 +9,9 @@ opencv-python-headless
 
 # Webhook receiver
 Flask
+fastapi
+uvicorn
+requests
 
 # Image processing
 scikit-image

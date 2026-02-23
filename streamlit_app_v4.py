@@ -305,7 +305,7 @@ def _render_logged_in_sidebar(user_email, supabase):
             user_status_text = "状態取得エラー"
 
     st.write(f"ログイン中: {user_email or '（不明なユーザー）'}")
-    st.markdown(f"**ステータス:** {user_status_text}")
+    st.markdown(f"ステータス: {user_status_text}")
 
     if not is_paid:
         if st.button("有料登録", key="pay_btn_logged_in"):

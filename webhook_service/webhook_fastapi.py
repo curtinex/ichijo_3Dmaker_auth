@@ -33,11 +33,15 @@ def upsert_member_by_email(email: Optional[str], payload: dict):
     if not supabase:
         logging.warning("Supabase client not configured; skipping upsert")
         return None
+    if not email:
+        logging.warning("No email provided for upsert; skipping to prevent NULL email rows")
+        return None
     try:
         # Ensure email is present in payload when available so upsert sets it
-        if email and 'email' not in payload:
+        if 'email' not in payload:
             payload['email'] = email
-        resp = supabase.table('members').upsert(payload).execute()
+        # Explicitly use on_conflict='email' to update the existing row instead of inserting a new one
+        resp = supabase.table('members').upsert(payload, on_conflict='email').execute()
         logging.info(f"Upserted member {email}: {resp}")
         return resp
     except Exception:

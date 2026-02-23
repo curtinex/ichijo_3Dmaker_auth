@@ -268,20 +268,61 @@ def _render_logged_in_sidebar(user_email, supabase):
 
     Returns True if the user was logged out by this handler, else False.
     """
+    user_status_text = "状態確認中..."
+    is_paid = False
+    
+    if supabase and user_email:
+        try:
+            res = supabase.table('members').select('plan, trial_expires').eq('email', user_email).limit(1).execute()
+            data = res.data if hasattr(res, 'data') else res.get('data', [])
+            if data and len(data) > 0:
+                member_info = data[0]
+                plan = member_info.get('plan', 'free')
+                trial_expires_str = member_info.get('trial_expires')
+                
+                if plan == 'paid':
+                    user_status_text = "③ 有料会員"
+                    is_paid = True
+                else:
+                    if trial_expires_str:
+                        from datetime import datetime, timezone
+                        clean_str = trial_expires_str.replace('Z', '+00:00')
+                        try:
+                            expires_dt = datetime.fromisoformat(clean_str)
+                            if expires_dt.tzinfo is None:
+                                expires_dt = expires_dt.replace(tzinfo=timezone.utc)
+                            if datetime.now(timezone.utc) < expires_dt:
+                                user_status_text = "① 無料会員(無料トライアル中)"
+                            else:
+                                user_status_text = "② 無料会員(無料トライアル終了)"
+                        except Exception:
+                            user_status_text = "② 無料会員(無料トライアル終了)"
+                    else:
+                        user_status_text = "② 無料会員(無料トライアル終了)"
+            else:
+                user_status_text = "未登録 (データなし)"
+        except Exception:
+            user_status_text = "状態取得エラー"
+
     st.write(f"ログイン中: {user_email or '（不明なユーザー）'}")
-    if st.button("有料登録", key="pay_btn_logged_in"):
-        checkout_url = create_checkout_session(user_email)
-        if checkout_url:
-            try:
-                js = f"""
-                <script>
-                window.open("{checkout_url}", "_blank");
-                </script>
-                """
-                st.components.v1.html(js, height=0)
-            except Exception:
-                st.markdown("[Checkout に進む](" + checkout_url + ")")
-            st.success("Checkout に遷移中です。新しいタブが開かない場合は上のリンクをクリックしてください。")
+    st.markdown(f"**ステータス:** {user_status_text}")
+
+    if not is_paid:
+        if st.button("有料登録", key="pay_btn_logged_in"):
+            checkout_url = create_checkout_session(user_email)
+            if checkout_url:
+                try:
+                    js = f"""
+                    <script>
+                    window.open("{checkout_url}", "_blank");
+                    </script>
+                    """
+                    st.components.v1.html(js, height=0)
+                except Exception:
+                    st.markdown("[Checkout に進む](" + checkout_url + ")")
+                st.success("Checkout に遷移中です。新しいタブが開かない場合は上のリンクをクリックしてください。")
+    else:
+        st.info("現在、有料プランをご利用中です。")
 
     if st.button("ログアウト", key="sidebar_logout_btn"):
         try:

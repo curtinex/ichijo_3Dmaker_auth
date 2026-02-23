@@ -411,7 +411,8 @@ with st.sidebar.expander("アカウント設定"):
                             upsert_payload["user_id"] = user_id
 
                         try:
-                            supabase.table('members').upsert(upsert_payload).execute()
+                            # emailを基準に既存データがあれば上書き（upsert）するよう明示
+                            supabase.table('members').upsert(upsert_payload, on_conflict='email').execute()
                             st.info("トライアル情報を記録しました。")
                         except Exception as e:
                             st.warning("トライアルは作成されましたが、members テーブルへの記録に失敗しました。管理者に連絡してください。")

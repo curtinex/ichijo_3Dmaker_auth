@@ -107,6 +107,8 @@ def handle_checkout_session(session: dict):
                         logging.warning(f"Supabase admin user create returned {r.status_code}: {r.text[:200]}")
                 except Exception:
                     logging.exception('Failed to call Supabase admin API')
+        except Exception:
+            logging.exception('Failed to check or create Supabase auth user')
 
     upsert_member_by_email(email, payload)
 

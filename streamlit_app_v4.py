@@ -271,6 +271,8 @@ def _render_logged_in_sidebar(user_email, supabase):
     user_status_text = "状態確認中..."
     is_paid = False
     stripe_sub_id = None
+    cancel_at_period_end = False
+    current_period_end = None
     
     if supabase and user_email:
         try:
@@ -285,6 +287,19 @@ def _render_logged_in_sidebar(user_email, supabase):
                 if plan == 'paid':
                     user_status_text = "③ 有料会員"
                     is_paid = True
+                    # Stripeから最新のサブスクリプション状態を取得して解約予約を確認
+                    if stripe_sub_id:
+                        secret, _, _ = get_stripe_config()
+                        if secret:
+                            try:
+                                stripe.api_key = secret
+                                sub = stripe.Subscription.retrieve(stripe_sub_id)
+                                cancel_at_period_end = sub.get('cancel_at_period_end', False)
+                                if sub.get('current_period_end'):
+                                    from datetime import datetime
+                                    current_period_end = datetime.fromtimestamp(sub['current_period_end']).strftime('%Y年%m月%d日')
+                            except Exception:
+                                pass
                 else:
                     if trial_expires_str:
                         from datetime import datetime, timezone
@@ -324,22 +339,26 @@ def _render_logged_in_sidebar(user_email, supabase):
                     st.markdown("[Checkout に進む](" + checkout_url + ")")
                 st.success("Checkout に遷移中です。新しいタブが開かない場合は上のリンクをクリックしてください。")
     else:
-        st.info("現在、有料プランをご利用中です。")
-        if stripe_sub_id:
-            cancel_confirm = st.checkbox("解約手続きを行う")
-            if cancel_confirm:
-                if st.button("本当に解約する（次回更新を停止）", key="cancel_sub_btn"):
-                    secret, _, _ = get_stripe_config()
-                    if secret:
-                        try:
-                            stripe.api_key = secret
-                            # 次回更新日（期間終了時）に解約するよう予約
-                            stripe.Subscription.modify(stripe_sub_id, cancel_at_period_end=True)
-                            st.success("解約を予約しました。現在の有効期限が切れると無料プランに戻ります。")
-                        except Exception as e:
-                            st.error(f"解約処理に失敗しました: {e}")
-                    else:
-                        st.error("Stripeの設定がありません。")
+        if cancel_at_period_end:
+            st.warning(f"⚠️ 解約手続き済みです。\n{current_period_end or '次回更新日'}までは有料プランをご利用いただけます。その後、自動的に無料プランへ移行します。")
+        else:
+            st.info("現在、有料プランをご利用中です。")
+            if stripe_sub_id:
+                cancel_confirm = st.checkbox("解約手続きを行う")
+                if cancel_confirm:
+                    if st.button("解約する（次回更新を停止）", key="cancel_sub_btn"):
+                        secret, _, _ = get_stripe_config()
+                        if secret:
+                            try:
+                                stripe.api_key = secret
+                                # 次回更新日（期間終了時）に解約するよう予約
+                                stripe.Subscription.modify(stripe_sub_id, cancel_at_period_end=True)
+                                st.success("解約を予約しました。画面を再読み込みするとステータスが更新されます。")
+                                _safe_rerun_or_stop()
+                            except Exception as e:
+                                st.error(f"解約処理に失敗しました: {e}")
+                        else:
+                            st.error("Stripeの設定がありません。")
 
     if st.button("ログアウト", key="sidebar_logout_btn"):
         try:

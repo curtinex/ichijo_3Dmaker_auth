@@ -341,6 +341,19 @@ def _render_logged_in_sidebar(user_email, supabase):
     else:
         if cancel_at_period_end:
             st.warning(f"⚠️ 解約手続き済みです。\n{current_period_end or '次回更新日'}までは有料プランをご利用いただけます。その後、自動的に無料プランへ移行します。")
+            if st.button("有料プランの自動更新を再開する", key="resume_sub_btn"):
+                secret, _, _ = get_stripe_config()
+                if secret:
+                    try:
+                        stripe.api_key = secret
+                        # 解約予約を取り消し、自動更新を再開する
+                        stripe.Subscription.modify(stripe_sub_id, cancel_at_period_end=False)
+                        st.success("自動更新を再開しました。引き続き有料プランをご利用いただけます。")
+                        _safe_rerun_or_stop()
+                    except Exception as e:
+                        st.error(f"再開処理に失敗しました: {e}")
+                else:
+                    st.error("Stripeの設定がありません。")
         else:
             st.info("現在、有料プランをご利用中です。")
             if stripe_sub_id:

@@ -285,7 +285,7 @@ def _render_logged_in_sidebar(user_email, supabase):
                 stripe_sub_id = member_info.get('stripe_subscription_id')
                 
                 if plan == 'paid':
-                    user_status_text = "③ 有料会員"
+                    user_status_text = "有料会員"
                     is_paid = True
                     # Stripeから最新のサブスクリプション状態を取得して解約予約を確認
                     if stripe_sub_id:
@@ -309,13 +309,13 @@ def _render_logged_in_sidebar(user_email, supabase):
                             if expires_dt.tzinfo is None:
                                 expires_dt = expires_dt.replace(tzinfo=timezone.utc)
                             if datetime.now(timezone.utc) < expires_dt:
-                                user_status_text = "① 無料会員(無料トライアル中)"
+                                user_status_text = "無料会員(無料トライアル中)"
                             else:
-                                user_status_text = "② 無料会員(無料トライアル終了)"
+                                user_status_text = "無料会員(無料トライアル終了)"
                         except Exception:
-                            user_status_text = "② 無料会員(無料トライアル終了)"
+                            user_status_text = "無料会員(無料トライアル終了)"
                     else:
-                        user_status_text = "② 無料会員(無料トライアル終了)"
+                        user_status_text = "無料会員(無料トライアル終了)"
             else:
                 user_status_text = "未登録 (データなし)"
         except Exception:
@@ -398,35 +398,6 @@ with st.sidebar.expander("アカウント設定"):
     if 'hide_login_form' not in st.session_state:
         st.session_state['hide_login_form'] = False
 
-    # Always show diagnostics (do not display secret values)
-    try:
-        has_secret_supa_url = bool(st.secrets.get("SUPA_URL"))
-    except Exception:
-        has_secret_supa_url = False
-    try:
-        has_secret_supa_anon = bool(st.secrets.get("SUPA_ANON"))
-    except Exception:
-        has_secret_supa_anon = False
-    try:
-        has_secret_stripe_secret = bool(st.secrets.get("STRIPE_SECRET"))
-    except Exception:
-        has_secret_stripe_secret = False
-    try:
-        has_secret_stripe_price = bool(st.secrets.get("STRIPE_PRICE_ID"))
-    except Exception:
-        has_secret_stripe_price = False
-
-    env_has_supa_url = bool(os.environ.get("SUPA_URL"))
-    env_has_supa_anon = bool(os.environ.get("SUPA_ANON"))
-    env_has_stripe_secret = bool(os.environ.get("STRIPE_SECRET"))
-    env_has_stripe_price = bool(os.environ.get("STRIPE_PRICE_ID"))
-
-    with st.expander("設定診断 (値は表示しません)"):
-        st.write("SUPA_URL:", "found (secrets)" if has_secret_supa_url else ("found (env)" if env_has_supa_url else "missing"))
-        st.write("SUPA_ANON:", "found (secrets)" if has_secret_supa_anon else ("found (env)" if env_has_supa_anon else "missing"))
-        st.write("STRIPE_SECRET:", "found (secrets)" if has_secret_stripe_secret else ("found (env)" if env_has_stripe_secret else "missing"))
-        st.write("STRIPE_PRICE_ID:", "found (secrets)" if has_secret_stripe_price else ("found (env)" if env_has_stripe_price else "missing"))
-
     if supabase is None:
         st.write("Supabase not configured.")
     else:
@@ -466,7 +437,7 @@ with st.sidebar.expander("アカウント設定"):
                 auth_mode = None
         if auth_mode == "会員登録":
             su_email = st.text_input("Email", key="su_email")
-            su_pwd = st.text_input("Password", type="password", key="su_pwd")
+            su_pwd = st.text_input("Password", type="password", key="su_pwd", placeholder="6文字以上で入力してください")
             
             # 会員登録して無料トライアルを開始 (メール認証 + パスワードのみ)
             if st.button("会員登録して無料トライアルを開始", key="trial_btn"):

@@ -270,15 +270,17 @@ def _render_logged_in_sidebar(user_email, supabase):
     """
     user_status_text = "状態確認中..."
     is_paid = False
+    stripe_sub_id = None
     
     if supabase and user_email:
         try:
-            res = supabase.table('members').select('plan, trial_expires').eq('email', user_email).limit(1).execute()
+            res = supabase.table('members').select('plan, trial_expires, stripe_subscription_id').eq('email', user_email).limit(1).execute()
             data = res.data if hasattr(res, 'data') else res.get('data', [])
             if data and len(data) > 0:
                 member_info = data[0]
                 plan = member_info.get('plan', 'free')
                 trial_expires_str = member_info.get('trial_expires')
+                stripe_sub_id = member_info.get('stripe_subscription_id')
                 
                 if plan == 'paid':
                     user_status_text = "③ 有料会員"
@@ -323,6 +325,21 @@ def _render_logged_in_sidebar(user_email, supabase):
                 st.success("Checkout に遷移中です。新しいタブが開かない場合は上のリンクをクリックしてください。")
     else:
         st.info("現在、有料プランをご利用中です。")
+        if stripe_sub_id:
+            cancel_confirm = st.checkbox("解約手続きを行う")
+            if cancel_confirm:
+                if st.button("本当に解約する（次回更新を停止）", key="cancel_sub_btn"):
+                    secret, _, _ = get_stripe_config()
+                    if secret:
+                        try:
+                            stripe.api_key = secret
+                            # 次回更新日（期間終了時）に解約するよう予約
+                            stripe.Subscription.modify(stripe_sub_id, cancel_at_period_end=True)
+                            st.success("解約を予約しました。現在の有効期限が切れると無料プランに戻ります。")
+                        except Exception as e:
+                            st.error(f"解約処理に失敗しました: {e}")
+                    else:
+                        st.error("Stripeの設定がありません。")
 
     if st.button("ログアウト", key="sidebar_logout_btn"):
         try:

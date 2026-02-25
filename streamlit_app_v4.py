@@ -1491,10 +1491,51 @@ def main():
                         data = extract_json_from_html_v2(uploaded_html.getvalue())
                         if data:
                             # Restore JSON
-                            st.session_state.json_bytes = json.dumps(data, ensure_ascii=False).encode('utf-8')
+                            json_str = json.dumps(data, ensure_ascii=False)
+                            st.session_state.json_bytes = json_str.encode('utf-8')
                             st.session_state.json_name = "restored_walls.json"
+                            
+                            # --- Regenerate Visualization and Viewer ---
+                            import tempfile
+                            with tempfile.TemporaryDirectory() as temp_dir:
+                                temp_path = Path(temp_dir)
+                                temp_json_path = temp_path / "restored.json"
+                                temp_viz_path = temp_path / "visualization_restored.png"
+                                temp_viewer_path = temp_path / "viewer_3d_edited.html"
+                                
+                                # Write JSON
+                                temp_json_path.write_text(json_str, encoding='utf-8')
+                                
+                                # Regenerate 2D Visualization
+                                # Scale logic fallback: use session state scale or default 100
+                                viz_scale = st.session_state.get('viz_scale', 100)
+                                visualize_3d_walls(str(temp_json_path), str(temp_viz_path), scale=int(viz_scale))
+                                if temp_viz_path.exists():
+                                    st.session_state.viz_bytes = temp_viz_path.read_bytes()
+                                    st.session_state.viz_name = "visualization_restored.png"
+                                
+                                # Regenerate 3D Viewer
+                                try:
+                                    _generate_3d_viewer_html(temp_json_path, temp_viewer_path)
+                                    if temp_viewer_path.exists():
+                                        st.session_state.viewer_html_bytes = temp_viewer_path.read_bytes()
+                                        st.session_state.viewer_html_name = "viewer_3d_edited.html"
+                                except Exception:
+                                    # Fallback if _generate_3d_viewer_html is not available
+                                    try:
+                                        from ichijo_core.ui_helpers import generate_3d_viewer_html
+                                        generate_3d_viewer_html(temp_json_path, temp_viewer_path)
+                                        if temp_viewer_path.exists():
+                                            st.session_state.viewer_html_bytes = temp_viewer_path.read_bytes()
+                                            st.session_state.viewer_html_name = "viewer_3d_edited.html"
+                                    except Exception:
+                                        pass
+
                             st.session_state.processed = True
                             st.session_state.workflow_step = 3
+                            # Clear intermediate states
+                            st.session_state.merged_processed = False 
+                            
                             st.success("復元に成功しました。編集ステップに移動します。")
                             _safe_rerun_or_stop()
                         else:

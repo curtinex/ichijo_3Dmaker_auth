@@ -1434,10 +1434,73 @@ def _filter_walls_by_endpoints_in_rect(walls, rect, scale, margin, img_height, m
     return filtered_walls
 
 
+# --- Restore feature helpers ---
+def check_membership_status_v2(supabase, user):
+    """Check membership."""
+    if not supabase or not user: return False
+    try:
+        email = None
+        if isinstance(user, dict):
+            u = user.get('user') or user
+            if isinstance(u, dict): email = u.get('email')
+        else:
+            u = getattr(user, 'user', None)
+            if u: email = getattr(u, 'email', None)
+        if email:
+            res = supabase.table('members').select('plan').eq('email', email).limit(1).execute()
+            data = res.data if hasattr(res, 'data') else res.get('data', [])
+            if data and len(data) > 0: return data[0].get('plan') == 'paid'
+    except: pass
+    return False
+
+def extract_json_from_html_v2(html_bytes):
+    try:
+        from bs4 import BeautifulSoup
+        import json
+        soup = BeautifulSoup(html_bytes, 'html.parser')
+        for script in soup.find_all('script'):
+            if script.string and 'const wallsData =' in script.string:
+                content = script.string
+                idx = content.find('const wallsData =')
+                if idx != -1:
+                    json_start = content.find('{', idx)
+                    if json_start != -1:
+                        cnt = 0
+                        for i, c in enumerate(content[json_start:]):
+                            if c == '{': cnt += 1
+                            elif c == '}': cnt -= 1
+                            if cnt == 0:
+                                return json.loads(content[json_start:json_start+i+1])
+    except: pass
+    return None
+
 def main():
     st.set_page_config(page_title="一条工務店 CAD図面3D化アプリ (β)", layout="wide")
     st.title("一条工務店 CAD図面3D化アプリ (β)")
     st.caption("アップロードした図面は一時的な処理にのみ使用し、データベースに保存されることはありません。")
+
+    # --- Restore Session Feature (Paid Members) ---
+    if st.session_state.get('user'):
+        supabase = get_supabase()
+        if check_membership_status_v2(supabase, st.session_state.user):
+            with st.expander("📂 保存したセッション（HTML）から復元する"):
+                st.info("有料会員特典: 以前に保存したHTMLファイル（viewer_3d_edited.htmlなど）をアップロードして、編集状態を復元できます。")
+                uploaded_html = st.file_uploader("HTMLファイルを選択", type=["html"], key="restore_html")
+                if uploaded_html and st.button("復元実行"):
+                    try:
+                        data = extract_json_from_html_v2(uploaded_html.getvalue())
+                        if data:
+                            # Restore JSON
+                            st.session_state.json_bytes = json.dumps(data, ensure_ascii=False).encode('utf-8')
+                            st.session_state.json_name = "restored_walls.json"
+                            st.session_state.processed = True
+                            st.session_state.workflow_step = 3
+                            st.success("復元に成功しました。編集ステップに移動します。")
+                            _safe_rerun_or_stop()
+                        else:
+                            st.error("HTMLファイルからJSONデータを抽出できませんでした。")
+                    except Exception as e:
+                        st.error(f"復元エラー: {e}")
     
     # 固定画像幅（自動結合と手動編集で統一）
     DISPLAY_IMAGE_WIDTH = 800

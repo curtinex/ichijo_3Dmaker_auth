@@ -1,7 +1,0 @@
-[submodule "ichijo_core_check"]
-	path = ichijo_core_check
-	url = https://github.com/curtinex/ichijo_core.git
-
-[submodule "ichijo_3Dmaker_v5"]
-	path = ichijo_3Dmaker_v5
-	url = https://github.com/curtinex/ichijo_3Dmaker_v5.git

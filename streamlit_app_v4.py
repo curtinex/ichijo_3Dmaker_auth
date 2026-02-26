@@ -135,6 +135,15 @@ try:
 except Exception:
     st_canvas = None
     _st_canvas_available = False
+# PIL画像をdata URLに変換する簡易ヘルパー（高速キャンバス用）
+def _pil_to_data_url(img, fmt="PNG"):
+    try:
+        buf = io.BytesIO()
+        img.save(buf, format=fmt)
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        return f"data:image/{fmt.lower()};base64,{b64}"
+    except Exception:
+        return None
 # streamlit_drawable_canvas が古い Streamlit API に依存しているため、互換用のimage_to_urlを埋め込む
 try:
     import streamlit.elements.image as _st_image_module
@@ -4179,7 +4188,10 @@ def main():
                         # デバッグ: 背景の寸法とモードを表示
                         bg_url = None
                         try:
-                            bg_url = _shim_image_to_url(bg_image, output_format="PNG") if '_shim_image_to_url' in globals() else None
+                            if '_shim_image_to_url' in globals():
+                                bg_url = _shim_image_to_url(bg_image, output_format="PNG")
+                            if not bg_url:
+                                bg_url = _pil_to_data_url(bg_image, fmt="PNG")
                         except Exception:
                             bg_url = None
 

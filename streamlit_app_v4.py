@@ -134,6 +134,29 @@ try:
 except Exception:
     st_canvas = None
     _st_canvas_available = False
+# streamlit_drawable_canvas が古い Streamlit API に依存しているため、互換用のimage_to_urlを埋め込む
+try:
+    import streamlit.elements.image as _st_image_module
+except Exception:
+    _st_image_module = None
+
+if _st_canvas_available and _st_image_module is not None and not hasattr(_st_image_module, "image_to_url"):
+    from streamlit.runtime.media_file_storage import media_file_storage
+
+    def _shim_image_to_url(image, width=None, clamp=False, channels="RGB", output_format="PNG", image_id=None):
+        # PIL.Image を PNG 等にエンコードし、一時URLを返す簡易版
+        try:
+            import PIL.Image
+            if not isinstance(image, PIL.Image.Image):
+                return None
+            buf = io.BytesIO()
+            image.save(buf, format=output_format)
+            data = buf.getvalue()
+            return media_file_storage.add(data, mime_type=f"image/{output_format.lower()}", extension=output_format.lower())
+        except Exception:
+            return None
+
+    _st_image_module.image_to_url = _shim_image_to_url
 from PIL import Image
 import stripe
 import streamlit.components.v1 as components

@@ -4,6 +4,7 @@ numpy
 Pillow
 PyMuPDF
 streamlit-image-coordinates
+streamlit-drawable-canvas
 opencv-python-headless
 
 # Webhook receiver

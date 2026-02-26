@@ -4159,7 +4159,17 @@ def main():
                     # 画像を元のサイズで表示（リサイズなし）
                     value = None
                     if use_fast_canvas:
-                        bg_image = display_img_resized.convert("RGB") if hasattr(display_img_resized, "convert") else display_img_resized
+                        # 背景が取得できなければ高速モードを自動オフにする
+                        try:
+                            bg_image = display_img_resized.convert("RGB") if hasattr(display_img_resized, "convert") else display_img_resized
+                            if bg_image is None:
+                                raise ValueError("background image is None")
+                        except Exception:
+                            bg_image = None
+                            use_fast_canvas = False
+                            st.warning("⚠️ 背景画像の準備に失敗したため高速キャンバスをオフにしました。従来表示に戻します。")
+
+                    if use_fast_canvas:
                         canvas_result = st_canvas(
                             fill_color="rgba(255, 0, 0, 0.6)",
                             stroke_width=10,

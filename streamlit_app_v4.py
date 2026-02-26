@@ -4164,7 +4164,7 @@ def main():
                             # 余白付き表示画像をキャンバス用にRGB化し、必要なら1200pxまで縮小
                             bg_image = display_img_resized.copy() if hasattr(display_img_resized, "copy") else display_img_resized
                             if hasattr(bg_image, "convert"):
-                                bg_image = bg_image.convert("RGB")
+                                bg_image = bg_image.convert("RGBA")
                             if bg_image is None:
                                 raise ValueError("background image is None")
                             if bg_image.width > 1200:
@@ -4176,6 +4176,14 @@ def main():
                             st.warning("⚠️ 背景画像の準備に失敗したため高速キャンバスをオフにしました。従来表示に戻します。")
 
                     if use_fast_canvas:
+                        # デバッグ: 背景の寸法とモードを表示
+                        with st.expander("高速キャンバス背景プレビュー", expanded=False):
+                            st.caption(f"mode={getattr(bg_image, 'mode', 'n/a')}, size={getattr(bg_image, 'size', 'n/a')}")
+                            try:
+                                st.image(bg_image, width=min(400, bg_image.width))
+                            except Exception:
+                                pass
+
                         canvas_result = st_canvas(
                             fill_color="rgba(255, 0, 0, 0.6)",
                             stroke_width=10,

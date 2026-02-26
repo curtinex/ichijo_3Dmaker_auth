@@ -4177,8 +4177,14 @@ def main():
 
                     if use_fast_canvas:
                         # デバッグ: 背景の寸法とモードを表示
+                        bg_url = None
+                        try:
+                            bg_url = _shim_image_to_url(bg_image, output_format="PNG") if '_shim_image_to_url' in globals() else None
+                        except Exception:
+                            bg_url = None
+
                         with st.expander("高速キャンバス背景プレビュー", expanded=False):
-                            st.caption(f"mode={getattr(bg_image, 'mode', 'n/a')}, size={getattr(bg_image, 'size', 'n/a')}")
+                            st.caption(f"mode={getattr(bg_image, 'mode', 'n/a')}, size={getattr(bg_image, 'size', 'n/a')}, url={'yes' if bg_url else 'no'}")
                             try:
                                 st.image(bg_image, width=min(400, bg_image.width))
                             except Exception:
@@ -4188,7 +4194,7 @@ def main():
                             fill_color="rgba(255, 0, 0, 0.6)",
                             stroke_width=10,
                             stroke_color="#ff0000",
-                            background_image=bg_image,
+                            background_image=(bg_url if bg_url else bg_image),
                             update_streamlit=True,
                             height=bg_image.height,
                             width=bg_image.width,

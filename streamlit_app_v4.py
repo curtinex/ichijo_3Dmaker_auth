@@ -566,6 +566,7 @@ try:
         generate_3d_viewer_html as _generate_3d_viewer_html,
     )
     
+
     # window_utilsとwall_editingのインポート（ichijo_coreは使わずフォールバック版のみ使用）
     try:
         # ichijo_coreがあってもフォールバック版を使う（ID生成の修正を確実に適用）
@@ -573,6 +574,344 @@ try:
     except ImportError as e:
         # フォールバック関数を定義
         import copy
+        
+        # 3Dビューア生成関数（フォールバック兼修正版）
+        def _generate_3d_viewer_html(json_path: Path, out_path: Path, with_lights: bool = False) -> Path:
+            """Three.js HTMLビューアを自動生成（JSON内容を直接埋め込み）- カスタム修正版"""
+            # JSONファイルを読み込んで内容を埋め込む
+            with open(json_path, 'r', encoding='utf-8') as f:
+                json_content = f.read()
+            
+            # HTMLテンプレート（ichijo_coreと同様だが、家具のオフセット対応を確実に含める）
+            html_template = '''<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>間取り図 3Dビューア</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: sans-serif; }
+        #container { width: 100vw; height: 100vh; }
+        #info {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.7); color: white;
+            padding: 10px; border-radius: 5px; font-size: 14px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <strong>間取り図 3Dビューア</strong><br>
+        初期化中...
+    </div>
+    <div id="container"></div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        const container = document.getElementById('container');
+        const info = document.getElementById('info');
+
+        try {
+            info.innerHTML = '<strong>間取り図 3Dビューア</strong><br>読込中...';
+
+            // シーン・カメラ・レンダラー初期化
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(BACKGROUND_COLOR_PLACEHOLDER);
+
+            const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(15, 15, 15);
+
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            AMBIENT_LIGHT_PLACEHOLDER
+            DIRECTIONAL_LIGHT_PLACEHOLDER
+
+            const gridHelper = new THREE.GridHelper(50, 50, 0x888888, 0xcccccc);
+            scene.add(gridHelper);
+
+            // JSON データ（埋め込み）
+            const wallsData = JSON_DATA_PLACEHOLDER;
+            let walls = wallsData.walls || [];
+            
+            walls = walls.map(wall => ({
+                ...wall,
+                start: [wall.start[0], wall.start[1]],
+                end: [wall.end[0], wall.end[1]],
+                height: wall.height,
+                thickness: wall.thickness,
+                base_height: (wall.base_height || 0),
+                windows: wall.windows ? wall.windows.map(w => ({
+                    ...w,
+                    position: w.position,
+                    width: w.width,
+                    height: w.height
+                })) : []
+            }));
+            
+            if (wallsData.metadata && wallsData.metadata.lights) {
+                wallsData.metadata.lights = wallsData.metadata.lights.map(light => ({
+                    ...light,
+                    position: [light.position[0], light.position[1], light.position[2]]
+                }));
+            }
+            
+            let offsetX = 0, offsetY = 0;
+            let minX = 0, maxX = 0, minY = 0, maxY = 0;
+            if (walls.length > 0) {
+                const allX = walls.flatMap(w => [w.start[0], w.end[0]]);
+                const allY = walls.flatMap(w => [w.start[1], w.end[1]]);
+                minX = Math.min(...allX);
+                maxX = Math.max(...allX);
+                minY = Math.min(...allY);
+                maxY = Math.max(...allY);
+                offsetX = (minX + maxX) / 2;
+                offsetY = (minY + maxY) / 2;
+            }
+            
+            info.innerHTML = `<strong>間取り図 3Dビューア</strong><br>壁数: ${walls.length}<br>マウス: 回転・拡大縮小・移動`;
+
+            const wallMaterial = new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                emissive: 0xffffff,
+                emissiveIntensity: EMISSIVE_INTENSITY_PLACEHOLDER,
+                roughness: 0.7,
+                metalness: 0.1
+            });
+            const edgeMaterial = new THREE.LineBasicMaterial({ color: 0xbbbbbb, linewidth: 0.05 });
+
+            walls.forEach(wall => {
+                const x1 = wall.start[0];
+                const y1 = wall.start[1];
+                const x2 = wall.end[0];
+                const y2 = wall.end[1];
+                const length = Math.sqrt((x2-x1)**2 + (y2-y1)**2);
+                const centerX = (x1 + x2) / 2;
+                const centerY = (y1 + y2) / 2;
+                const baseHeight = wall.base_height || 0;
+                const centerZ = baseHeight + (wall.height / 2);
+
+                const geometry = new THREE.BoxGeometry(length, wall.height, wall.thickness);
+                const mesh = new THREE.Mesh(geometry, wallMaterial);
+                mesh.position.set(centerX - offsetX, centerZ, -(centerY - offsetY));
+                const angle = Math.atan2(-(y2 - y1), x2 - x1);
+                mesh.rotation.y = angle;
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                scene.add(mesh);
+                
+                const edges = new THREE.EdgesGeometry(geometry);
+                const line = new THREE.LineSegments(edges, edgeMaterial);
+                line.position.copy(mesh.position);
+                line.rotation.copy(mesh.rotation);
+                scene.add(line);
+            });
+
+            if (wallsData.floors && wallsData.floors.length > 0) {
+                wallsData.floors.forEach((floorData, idx) => {
+                    const x1 = floorData.x1;
+                    const y1 = floorData.y1;
+                    const x2 = floorData.x2;
+                    const y2 = floorData.y2;
+                    const floorW = Math.abs(x2 - x1);
+                    const floorD = Math.abs(y2 - y1);
+                    const centerX = (x1 + x2) / 2;
+                    const centerY = (y1 + y2) / 2;
+                    const floorGeometry = new THREE.BoxGeometry(floorW, 0.1, floorD);
+                    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xd2b48c });
+                    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+                    floor.position.set(centerX - offsetX, -0.05, -(centerY - offsetY));
+                    floor.receiveShadow = true;
+                    scene.add(floor);
+                });
+            } else if (walls.length > 0) {
+                const floorW = maxX - minX;
+                const floorD = maxY - minY;
+                const floorGeometry = new THREE.BoxGeometry(floorW, 0.1, floorD);
+                const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xd2b48c });
+                const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+                floor.position.set((minX + maxX) / 2 - offsetX, -0.05, -((minY + maxY) / 2 - offsetY));
+                floor.receiveShadow = true;
+                scene.add(floor);
+            }
+                
+            WITH_LIGHTS_PLACEHOLDER
+
+            // 家具オブジェクト
+            const furniture = wallsData.furniture || [];
+            furniture.forEach((item, idx) => {
+                const width = item.dimensions.width;
+                const depth = item.dimensions.depth;
+                const height = item.dimensions.height;
+                const x = item.position[0];
+                const y = item.position[1];
+                const furnitureColor = item.color_three_js ? parseInt(item.color_three_js) : 0x8B4513;
+                
+                const furnitureGeometry = new THREE.BoxGeometry(width, height, depth);
+                const furnitureMaterial = new THREE.MeshStandardMaterial({
+                    color: furnitureColor,
+                    emissive: furnitureColor,
+                    emissiveIntensity: EMISSIVE_INTENSITY_PLACEHOLDER,
+                    roughness: 0.7,
+                    metalness: 0.1
+                });
+                const furnitureMesh = new THREE.Mesh(furnitureGeometry, furnitureMaterial);
+                
+                // オフセット（床からの高さ）を取得（デフォルト0）
+                // JSONに保存された offset フィールドを使用
+                const offset = item.offset || 0;
+                
+                // 位置設定（床からのオフセット + 高さの半分の位置）
+                furnitureMesh.position.set(
+                    x - offsetX,
+                    offset + height / 2, 
+                    -(y - offsetY)
+                );
+                
+                furnitureMesh.castShadow = true;
+                furnitureMesh.receiveShadow = true;
+                scene.add(furnitureMesh);
+            });
+
+            // 階段オブジェクト
+            const stairs = wallsData.stairs || [];
+            const colorMap = { 'Tan': 0xd2b48c, 'Walnut': 0x8B4513, 'Oak': 0xDEB887, 'Dark': 0x654321 };
+            stairs.forEach((stair, idx) => {
+                const width = stair.size[0];
+                const height = stair.size[2];
+                const depth = stair.size[1];
+                const x = stair.position[0];
+                const y = stair.position[1];
+                const z = stair.position[2];
+                const rotation = (stair.rotation || 0) * Math.PI / 180;
+                const colorName = stair.color || 'Tan';
+                const stairColor = colorMap[colorName] || 0xd2b48c;
+                
+                const stairGeometry = new THREE.BoxGeometry(width, height, depth);
+                const stairMaterial = new THREE.MeshStandardMaterial({ color: stairColor, roughness: 0.8, metalness: 0.1 });
+                const stairMesh = new THREE.Mesh(stairGeometry, stairMaterial);
+                stairMesh.position.set(x - offsetX, z + height / 2, -(y - offsetY));
+                stairMesh.rotation.y = rotation;
+                stairMesh.castShadow = true;
+                stairMesh.receiveShadow = true;
+                scene.add(stairMesh);
+                
+                const stairEdges = new THREE.EdgesGeometry(stairGeometry);
+                const stairEdgeMaterial = new THREE.LineBasicMaterial({ color: 0xbbbbbb, linewidth: 0.05 });
+                const stairEdgeLine = new THREE.LineSegments(stairEdges, stairEdgeMaterial);
+                stairEdgeLine.position.copy(stairMesh.position);
+                stairEdgeLine.rotation.copy(stairMesh.rotation);
+                scene.add(stairEdgeLine);
+            });
+
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+        } catch (err) {
+            info.innerHTML = `<strong>エラー発生</strong><br>${err.message}<br><small>コンソールを確認してください</small>`;
+            console.error('3Dビューアエラー:', err);
+        }
+    </script>
+</body>
+</html>'''
+    
+            if with_lights:
+                emissive_intensity = '0.05'
+                background_color = '0x000000'
+                ambient_light_code = 'const ambientLight = new THREE.AmbientLight(0xffffff, 0.1); scene.add(ambientLight);'
+                directional_light_code = '// ディレクショナルライトなし'
+                lights_code = '''
+                    const lights = wallsData.metadata?.lights || [];
+                    const avgWallHeight = walls.reduce((sum, w) => sum + w.height, 0) / walls.length || 2.7;
+                    const _floorW = (typeof floorW !== 'undefined') ? floorW : (maxX - minX);
+                    const _floorD = (typeof floorD !== 'undefined') ? floorD : (maxY - minY);
+                    const ceilingGeometry = new THREE.BoxGeometry(_floorW, 0.1, _floorD);
+                    const ceilingMaterial = new THREE.MeshStandardMaterial({ color: 0xf5f5f0 });
+                    const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
+                    ceiling.position.set((minX + maxX) / 2 - offsetX, avgWallHeight - 0.05, -((minY + maxY) / 2 - offsetY));
+                    ceiling.receiveShadow = true;
+                    scene.add(ceiling);
+                    
+                    lights.forEach((light, idx) => {
+                        const lx = 0; const lz = 0;
+                        const ly = Math.abs(light.position[1] || avgWallHeight);
+                        const spotLight = new THREE.SpotLight(0xffffff, 1.5);
+                        spotLight.position.set(lx, ly, lz);
+                        spotLight.target.position.set(lx, 0, lz);
+                        spotLight.angle = Math.PI / 5;
+                        spotLight.penumbra = 0.4;
+                        spotLight.decay = 2;
+                        spotLight.distance = 20;
+                        spotLight.castShadow = true;
+                        spotLight.shadow.mapSize.width = 2048;
+                        spotLight.shadow.mapSize.height = 2048;
+                        spotLight.shadow.bias = -0.0005;
+                        scene.add(spotLight);
+                        scene.add(spotLight.target);
+                        const cylinderGeometry = new THREE.CylinderGeometry(0.1, 0.1, 0.3, 16);
+                        const cylinderMaterial = new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0xffff00, emissiveIntensity: 0.5 });
+                        const cylinder = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
+                        cylinder.position.set(0, avgWallHeight - 0.15, 0);
+                        scene.add(cylinder);
+                    });'''
+            else:
+                emissive_intensity = '0.6'
+                background_color = '0xf0f0f0'
+                ambient_light_code = 'const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); scene.add(ambientLight);'
+                directional_light_code = '''const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+                    dirLight.position.set(0, 50, 0);
+                    dirLight.target = new THREE.Object3D();
+                    dirLight.target.position.set(0, 0, 0);
+                    scene.add(dirLight.target);
+                    dirLight.castShadow = true;
+                    dirLight.shadow.mapSize.width = 2048;
+                    dirLight.shadow.mapSize.height = 2048;
+                    dirLight.shadow.bias = -0.001;
+                    if (dirLight.shadow && dirLight.shadow.camera && dirLight.shadow.camera.isOrthographicCamera) {
+                        const s = Math.max((typeof floorW !== 'undefined' ? floorW : 10), (typeof floorD !== 'undefined' ? floorD : 10));
+                        dirLight.shadow.camera.left = -s; dirLight.shadow.camera.right = s;
+                        dirLight.shadow.camera.top = s; dirLight.shadow.camera.bottom = -s;
+                        dirLight.shadow.camera.near = 0.5; dirLight.shadow.camera.far = 200;
+                    }
+                    scene.add(dirLight);'''
+                lights_code = '                    // 照明機能なし\n\n'
+            
+            html_content = html_template.replace('JSON_DATA_PLACEHOLDER', json_content)
+            html_content = html_content.replace('EMISSIVE_INTENSITY_PLACEHOLDER', emissive_intensity)
+            html_content = html_content.replace('BACKGROUND_COLOR_PLACEHOLDER', background_color)
+            html_content = html_content.replace('AMBIENT_LIGHT_PLACEHOLDER', ambient_light_code)
+            html_content = html_content.replace('DIRECTIONAL_LIGHT_PLACEHOLDER', directional_light_code)
+            html_content = html_content.replace('WITH_LIGHTS_PLACEHOLDER', lights_code)
+            out_path.write_text(html_content, encoding='utf-8')
+            return out_path
+        
         def add_window_walls(json_data, wall1, wall2, window_height, base_height, room_height, window_model=None, window_height_mm=None):
             """窓で分断された2本の壁の間に、床側と天井側の壁を追加（フォールバック版）"""
             updated_data = copy.deepcopy(json_data)

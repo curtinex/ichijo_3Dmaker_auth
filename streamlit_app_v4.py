@@ -1073,7 +1073,7 @@ def _snap_to_grid(rect_pixel, json_data, scale, grid_size=0.45):
     return x1_m, y1_m, width_m, depth_m
 
 
-def _add_furniture_to_json(json_data, height_m, color_name, x_start, y_start, width, depth):
+def _add_furniture_to_json(json_data, height_m, color_name, x_start, y_start, width, depth, offset_m=0.0):
     """
     JSONに家具オブジェクトを追加
     
@@ -1083,6 +1083,7 @@ def _add_furniture_to_json(json_data, height_m, color_name, x_start, y_start, wi
         color_name: 色の名前（FURNITURE_COLOR_OPTIONSのキー）
         x_start, y_start: 配置開始座標（メートル）
         width, depth: 幅と奥行き（メートル）
+        offset_m: 床からの高さ（メートル）. デフォルトは0.0（床置き）
     """
     import copy
     
@@ -1103,6 +1104,7 @@ def _add_furniture_to_json(json_data, height_m, color_name, x_start, y_start, wi
             "depth": depth,
             "height": height_m
         },
+        "offset": offset_m,  # 床からの高さを追加
         "bounds": {
             "x_start": x_start,
             "y_start": y_start,
@@ -1483,7 +1485,7 @@ def main():
     if st.session_state.get('user'):
         supabase = get_supabase()
         if check_membership_status_v2(supabase, st.session_state.user):
-            with st.expander("📂 保存したセッション（HTML）から復元する"):
+            with st.expander("📂 保存したセッション（HTML）を復元する"):
                 st.info("有料会員特典: 以前に保存したHTMLファイル（viewer_3d_edited.htmlなど）をアップロードして、編集状態を復元できます。")
                 uploaded_html = st.file_uploader("HTMLファイルを選択", type=["html"], key="restore_html")
                 if uploaded_html and st.button("復元実行"):
@@ -3544,12 +3546,41 @@ def main():
                             col_height, col_color = st.columns(2)
                             
                             with col_height:
+                                # 高さの選択肢を用意（カスタムを追加）
+                                height_options_list = list(FURNITURE_HEIGHT_OPTIONS.keys())
+                                if "カスタム" not in height_options_list:
+                                    height_options_list.append("カスタム")
+                                    
                                 height_option = st.selectbox(
-                                    "高さ",
-                                    list(FURNITURE_HEIGHT_OPTIONS.keys()),
+                                    "高さ（サイズ）",
+                                    height_options_list,
                                     help="家具の高さを選択してください",
                                     key="furniture_height_option"
                                 )
+                                
+                                # カスタム入力時の数値入力
+                                custom_height_mm = 850
+                                if height_option == "カスタム":
+                                    custom_height_mm = st.number_input(
+                                        "高さの値を入力 (mm)",
+                                        min_value=100,
+                                        max_value=3000,
+                                        value=850,
+                                        step=10,
+                                        key="furniture_custom_height_mm"
+                                    )
+                                
+                                # 床からの高さ（オフセット）設定
+                                offset_height_mm = st.number_input(
+                                    "床からの高さ (mm)",
+                                    min_value=0,
+                                    max_value=3000,
+                                    value=0,
+                                    step=10,
+                                    help="家具の下端の床からの高さ（0で床置き）",
+                                    key="furniture_offset_height_mm"
+                                )
+                                offset_height = offset_height_mm / 1000.0
                             
                             with col_color:
                                 color_option = st.selectbox(
@@ -3566,6 +3597,9 @@ def main():
                                 heights = [w.get('height', 2.4) for w in walls if 'height' in w]
                                 selected_height = max(heights) if heights else 2.4
                                 height_display = f"天井合わせ（{selected_height*100:.0f}cm）"
+                            elif height_option == "カスタム":
+                                selected_height = custom_height_mm / 1000.0
+                                height_display = f"カスタム（{custom_height_mm}mm）"
                             else:
                                 selected_height = FURNITURE_HEIGHT_OPTIONS[height_option]
                                 height_display = height_option
@@ -3574,7 +3608,8 @@ def main():
                             st.session_state.furniture_params = {
                                 'height_option': height_option,
                                 'color_option': color_option,
-                                'selected_height': selected_height
+                                'selected_height': selected_height,
+                                'offset_height': offset_height  # オフセット高さを保存
                             }
                             
                             # 選択された家具の情報を表示
@@ -4674,11 +4709,14 @@ def main():
                                 furniture_params = st.session_state.get('furniture_params', {})
                                 height_option = furniture_params.get('height_option', '30cm')
                                 color_option = furniture_params.get('color_option', 'ダーク')
+                                furniture_offset = furniture_params.get('offset_height', 0.0)
                                 
                                 # 高さオプションの取得
                                 if height_option == "天井合わせ":
                                     heights = [w.get('height', 2.4) for w in walls if 'height' in w]
                                     furniture_height = max(heights) if heights else 2.4
+                                elif height_option == "カスタム":
+                                    furniture_height = furniture_params.get('selected_height', 0.85)
                                 else:
                                     furniture_height = FURNITURE_HEIGHT_OPTIONS.get(height_option, 0.3)
                                 
@@ -4691,7 +4729,7 @@ def main():
                                         scale
                                     )
                                     
-                                    # 家具を追加
+                                    # 家具を追加（オフセットも指定）
                                     updated_json = _add_furniture_to_json(
                                         updated_json,
                                         furniture_height,
@@ -4699,7 +4737,8 @@ def main():
                                         x_start,
                                         y_start,
                                         width,
-                                        depth
+                                        depth,
+                                        offset_m=furniture_offset
                                     )
                                 
                                 # 自動保存: オブジェクト配置結果を JSON/可視化/3Dビューアに反映

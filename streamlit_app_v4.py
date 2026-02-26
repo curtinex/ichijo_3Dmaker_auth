@@ -657,8 +657,7 @@ try:
             const scene = new THREE.Scene();
             scene.background = new THREE.Color(BACKGROUND_COLOR_PLACEHOLDER);
 
-            const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(15, 15, 15);
+            const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
 
             const renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -672,7 +671,16 @@ try:
             AMBIENT_LIGHT_PLACEHOLDER
             DIRECTIONAL_LIGHT_PLACEHOLDER
 
-            const gridHelper = new THREE.GridHelper(50, 50, 0x888888, 0xcccccc);
+            let sceneSize = 10;
+            if (walls.length > 0) {
+                sceneSize = Math.max((maxX - minX), (maxY - minY), 10);
+            }
+            const camDist = Math.max(sceneSize * 1.2, 12);
+            camera.position.set(camDist, camDist * 0.8, camDist);
+            controls.target.set((minX + maxX) / 2 - offsetX, 0, -((minY + maxY) / 2 - offsetY));
+            controls.update();
+
+            const gridHelper = new THREE.GridHelper(sceneSize * 2.5, 50, 0x888888, 0xcccccc);
             scene.add(gridHelper);
 
             // JSON データ（埋め込み）
@@ -4151,14 +4159,15 @@ def main():
                     # 画像を元のサイズで表示（リサイズなし）
                     value = None
                     if use_fast_canvas:
+                        bg_image = display_img_resized.convert("RGB") if hasattr(display_img_resized, "convert") else display_img_resized
                         canvas_result = st_canvas(
                             fill_color="rgba(255, 0, 0, 0.6)",
                             stroke_width=10,
                             stroke_color="#ff0000",
-                            background_image=display_img_resized,
+                            background_image=bg_image,
                             update_streamlit=True,
-                            height=display_img_resized.height,
-                            width=display_img_resized.width,
+                            height=bg_image.height,
+                            width=bg_image.width,
                             drawing_mode="point",
                             key=f"canvas_{coord_key}",
                             display_toolbar=False

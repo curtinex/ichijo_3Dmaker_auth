@@ -4173,7 +4173,7 @@ def main():
                             # 余白付き表示画像をキャンバス用にRGB化し、必要なら1200pxまで縮小
                             bg_image = display_img_resized.copy() if hasattr(display_img_resized, "copy") else display_img_resized
                             if hasattr(bg_image, "convert"):
-                                bg_image = bg_image.convert("RGBA")
+                                bg_image = bg_image.convert("RGB")
                             if bg_image is None:
                                 raise ValueError("background image is None")
                             if bg_image.width > 1200:

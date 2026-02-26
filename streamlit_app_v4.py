@@ -3559,28 +3559,29 @@ def main():
                                 )
                                 
                                 # カスタム入力時の数値入力
-                                custom_height_mm = 850
+                                custom_height_cm = 85.0
                                 if height_option == "カスタム":
-                                    custom_height_mm = st.number_input(
-                                        "高さの値を入力 (mm)",
-                                        min_value=100,
-                                        max_value=3000,
-                                        value=850,
-                                        step=10,
-                                        key="furniture_custom_height_mm"
+                                    custom_height_cm = st.number_input(
+                                        "高さの値を入力 (cm)",
+                                        min_value=1.0,
+                                        max_value=300.0,
+                                        value=85.0,
+                                        step=1.0,
+                                        key="furniture_custom_height_cm"
                                     )
                                 
                                 # 床からの高さ（オフセット）設定
-                                offset_height_mm = st.number_input(
-                                    "床からの高さ (mm)",
-                                    min_value=0,
-                                    max_value=3000,
-                                    value=0,
-                                    step=10,
+                                offset_height_cm = st.number_input(
+                                    "床からの高さ (cm)",
+                                    min_value=0.0,
+                                    max_value=300.0,
+                                    value=0.0,
+                                    step=1.0,
                                     help="家具の下端の床からの高さ（0で床置き）",
-                                    key="furniture_offset_height_mm"
+                                    key="furniture_offset_height_cm"
                                 )
-                                offset_height = offset_height_mm / 1000.0
+                                # メートル換算
+                                offset_height = offset_height_cm / 100.0
                             
                             with col_color:
                                 color_option = st.selectbox(
@@ -3598,8 +3599,8 @@ def main():
                                 selected_height = max(heights) if heights else 2.4
                                 height_display = f"天井合わせ（{selected_height*100:.0f}cm）"
                             elif height_option == "カスタム":
-                                selected_height = custom_height_mm / 1000.0
-                                height_display = f"カスタム（{custom_height_mm}mm）"
+                                selected_height = custom_height_cm / 100.0
+                                height_display = f"カスタム（{custom_height_cm}cm）"
                             else:
                                 selected_height = FURNITURE_HEIGHT_OPTIONS[height_option]
                                 height_display = height_option

@@ -4206,7 +4206,8 @@ def main():
                             fill_color="rgba(255, 0, 0, 0.6)",
                             stroke_width=10,
                             stroke_color="#ff0000",
-                            background_image=(bg_url if bg_url else bg_image),
+                            # st_canvas はPIL Imageを期待する。data URLを渡すと内部でheight属性アクセスで落ちるため、ここはPILのみ渡す。
+                            background_image=bg_image,
                             update_streamlit=True,
                             height=bg_image.height,
                             width=bg_image.width,

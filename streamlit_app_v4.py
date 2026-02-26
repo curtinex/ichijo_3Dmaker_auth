@@ -116,6 +116,7 @@ if not success:
     st.stop()
 
 import io
+import base64
 import re
 import time
 import json
@@ -141,18 +142,16 @@ except Exception:
     _st_image_module = None
 
 if _st_canvas_available and _st_image_module is not None and not hasattr(_st_image_module, "image_to_url"):
-    from streamlit.runtime.media_file_storage import media_file_storage
-
     def _shim_image_to_url(image, width=None, clamp=False, channels="RGB", output_format="PNG", image_id=None):
-        # PIL.Image を PNG 等にエンコードし、一時URLを返す簡易版
+        """最小限の互換: PIL.Image を data URL にして返す"""
         try:
             import PIL.Image
             if not isinstance(image, PIL.Image.Image):
                 return None
             buf = io.BytesIO()
             image.save(buf, format=output_format)
-            data = buf.getvalue()
-            return media_file_storage.add(data, mime_type=f"image/{output_format.lower()}", extension=output_format.lower())
+            data = base64.b64encode(buf.getvalue()).decode("ascii")
+            return f"data:image/{output_format.lower()};base64,{data}"
         except Exception:
             return None
 

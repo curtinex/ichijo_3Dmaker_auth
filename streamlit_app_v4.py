@@ -4161,9 +4161,15 @@ def main():
                     if use_fast_canvas:
                         # 背景が取得できなければ高速モードを自動オフにする
                         try:
-                            bg_image = display_img_resized.convert("RGB") if hasattr(display_img_resized, "convert") else display_img_resized
+                            # 余白付き表示画像をキャンバス用にRGB化し、必要なら1200pxまで縮小
+                            bg_image = display_img_resized.copy() if hasattr(display_img_resized, "copy") else display_img_resized
+                            if hasattr(bg_image, "convert"):
+                                bg_image = bg_image.convert("RGB")
                             if bg_image is None:
                                 raise ValueError("background image is None")
+                            if bg_image.width > 1200:
+                                ratio = 1200 / bg_image.width
+                                bg_image = bg_image.resize((1200, int(bg_image.height * ratio)), Image.Resampling.LANCZOS)
                         except Exception:
                             bg_image = None
                             use_fast_canvas = False

@@ -671,18 +671,6 @@ try:
             AMBIENT_LIGHT_PLACEHOLDER
             DIRECTIONAL_LIGHT_PLACEHOLDER
 
-            let sceneSize = 10;
-            if (walls.length > 0) {
-                sceneSize = Math.max((maxX - minX), (maxY - minY), 10);
-            }
-            const camDist = Math.max(sceneSize * 1.2, 12);
-            camera.position.set(camDist, camDist * 0.8, camDist);
-            controls.target.set((minX + maxX) / 2 - offsetX, 0, -((minY + maxY) / 2 - offsetY));
-            controls.update();
-
-            const gridHelper = new THREE.GridHelper(sceneSize * 2.5, 50, 0x888888, 0xcccccc);
-            scene.add(gridHelper);
-
             // JSON データ（埋め込み）
             const wallsData = JSON_DATA_PLACEHOLDER;
             let walls = wallsData.walls || [];
@@ -721,6 +709,18 @@ try:
                 offsetX = (minX + maxX) / 2;
                 offsetY = (minY + maxY) / 2;
             }
+
+            let sceneSize = 10;
+            if (walls.length > 0) {
+                sceneSize = Math.max((maxX - minX), (maxY - minY), 10);
+            }
+            const camDist = Math.max(sceneSize * 1.2, 12);
+            camera.position.set(camDist, camDist * 0.8, camDist);
+            controls.target.set((minX + maxX) / 2 - offsetX, 0, -((minY + maxY) / 2 - offsetY));
+            controls.update();
+
+            const gridHelper = new THREE.GridHelper(sceneSize * 2.5, 50, 0x888888, 0xcccccc);
+            scene.add(gridHelper);
             
             info.innerHTML = `<strong>間取り図 3Dビューア</strong><br>壁数: ${walls.length}<br>マウス: 回転・拡大縮小・移動`;
 

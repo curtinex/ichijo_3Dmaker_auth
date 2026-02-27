@@ -16,17 +16,15 @@
         const ctx = canvas.getContext('2d');
         let backgroundImage = new Image();
 
-        // Streamlitからメッセージを受信
-        window.addEventListener("message", (event) => {
-            if (event.data.type === "SET_IMAGE") {
-                canvas.width = event.data.width;
-                canvas.height = event.data.height;
-                backgroundImage.src = event.data.imageDataUrl;
-                backgroundImage.onload = () => {
-                    ctx.drawImage(backgroundImage, 0, 0);
-                }
-            }
-        });
+        // Python側で置換されるプレースホルダー
+        const imageDataUrl = "__IMAGE_DATA_URL__";
+        canvas.width = __CANVAS_WIDTH__;
+        canvas.height = __CANVAS_HEIGHT__;
+
+        backgroundImage.src = imageDataUrl;
+        backgroundImage.onload = () => {
+            ctx.drawImage(backgroundImage, 0, 0);
+        };
 
         // Canvasクリック時の処理
         canvas.addEventListener('click', (event) => {

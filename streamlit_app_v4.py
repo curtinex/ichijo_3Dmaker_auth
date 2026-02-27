@@ -183,49 +183,18 @@ def clickable_canvas(image_data_url, width, height, key=None):
         st.error("`clickable_canvas.html` が見つかりません。")
         return None
 
+    # プレースホルダーを実際の値に置換
+    html_content = html_template.replace("__IMAGE_DATA_URL__", image_data_url)
+    html_content = html_content.replace("__CANVAS_WIDTH__", str(width))
+    html_content = html_content.replace("__CANVAS_HEIGHT__", str(height))
+
     # HTMLをコンポーネントとしてレンダリングし、戻り値（クリック座標）を取得
     component_value = components.html(
-        html_template,
+        html_content,
         width=width,
         height=height,
         key=key,
     )
-
-    # Streamlitに画像データを送信するためのJavaScriptを注入
-    # このスクリプトはコンポーネントがマウントされた後に一度だけ実行される
-    # ユニークなキーを使って正しいiframeをターゲットにする
-    # `components.html`はiframeを生成するため、そのiframeに対してpostMessageで通信する
-    # `key`をエスケープして、JavaScript文字列内で安全に使用できるようにする
-    js_key = key.replace("'", "\\'")
-    js_code = f"""
-        <script>
-        (function() {{
-            const checkFrame = () => {{
-                // `key`に基づいてiframeを特定するセレクタ
-                const frame = parent.document.querySelector('iframe[srcdoc*="{js_key}"]');
-                if (frame && frame.contentWindow) {{
-                    // 画像データを送信
-                    frame.contentWindow.postMessage({{
-                        type: "SET_IMAGE",
-                        imageDataUrl: "{image_data_url}",
-                        width: {width},
-                        height: {height}
-                    }}, "*");
-                }} else {{
-                    // フレームが見つからない場合はリトライ
-                    setTimeout(checkFrame, 100);
-                }}
-            }};
-            // DOMの準備ができてから実行
-            if (document.readyState === 'complete') {{
-                checkFrame();
-            }} else {{
-                window.addEventListener('load', checkFrame);
-            }}
-        }})();
-        </script>
-    """
-    st.components.v1.html(js_code, height=0)
 
     return component_value
 

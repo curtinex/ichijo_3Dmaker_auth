@@ -1059,6 +1059,33 @@ try:
             else:
                 return None, None
         
+        def _find_furniture_at_click(click_x, click_y, furniture_list, scale, margin, img_height, min_x, min_y):
+            """クリック位置にある家具を検出"""
+            # 逆順で探索（描画順が後＝上にあるものを優先するため）
+            for i in range(len(furniture_list) - 1, -1, -1):
+                item = furniture_list[i]
+                bounds = item.get('bounds')
+                if not bounds:
+                    continue
+                    
+                # メートル座標からピクセル座標を計算
+                x_start_px = int((bounds['x_start'] - min_x) * scale) + margin
+                y_start_px = img_height - (int((bounds['y_start'] - min_y) * scale) + margin)
+                x_end_px = int((bounds['x_end'] - min_x) * scale) + margin
+                y_end_px = img_height - (int((bounds['y_end'] - min_y) * scale) + margin)
+                
+                # Y軸は反転しているので大小関係を整理
+                px_min_x = min(x_start_px, x_end_px)
+                px_max_x = max(x_start_px, x_end_px)
+                px_min_y = min(y_start_px, y_end_px)
+                px_max_y = max(y_start_px, y_end_px)
+                
+                # 矩形内判定
+                if (px_min_x <= click_x <= px_max_x) and (px_min_y <= click_y <= px_max_y):
+                    return item, i
+                    
+            return None, -1
+
         def _select_best_wall_pair_from_4(walls):
             """4本の壁から結合すべき最適な2本を選択（フォールバック版）"""
             if len(walls) < 2:
@@ -1356,6 +1383,8 @@ def _reset_selection_state():
     st.session_state.selected_walls_for_merge = []       # 線を結合モードの壁選択をクリア
     st.session_state.selected_walls_for_window = []      # 窓追加モードの壁選択をクリア
     st.session_state.selected_walls_for_delete = []      # 線削除モードの壁選択をクリア
+    st.session_state.selected_furniture_to_delete = []   # オブジェクト削除モードの選択をクリア
+    st.session_state.execute_furniture_deletion = False  # オブジェクト削除実行フラグのクリア
     
     # リセットカウンターをインクリメント（画像コンポーネントのキーをリセットするため）
     if 'selection_reset_counter' not in st.session_state:
@@ -2729,10 +2758,10 @@ def main():
             edit_mode = st.radio(
                 "編集モードを選択:",
                 #["線を結合", "線を追加", "線を削除", "窓を追加", "照明を配置", "オブジェクトを配置", "床を追加", "階段を配置"],
-                ["線を結合", "線を追加", "線を削除", "窓を追加", "オブジェクトを配置", "階段を配置"],
+                ["線を結合", "線を追加", "線を削除", "窓を追加", "オブジェクトを配置", "オブジェクトを削除", "階段を配置"],
                 horizontal=True,
                 #help="線を結合：2つの壁線を繋ぐ\n\n窓を追加：窓で分断された2本の壁を上下の壁で繋ぐ\n\n線を追加：新しい壁線を追加\n\n線を削除：選択範囲の壁を削除\n\n照明を配置：クリック位置にスポットライトを配置\n\nオブジェクトを配置：キッチンボードなどの家具を配置\n\n床を追加：四角形範囲を選択して床を追加\n\n階段を配置：コの字階段を配置"
-                help="線を結合：2つの壁線を繋ぐ\n\n線を追加：新しい壁線を追加\n\n線を削除：選択範囲の壁を削除\n\n窓を追加：窓で分断された2本の壁を上下の壁で繋ぐ\n\nオブジェクトを配置：キッチンボードなどの家具を配置\n\n階段を配置：コの字階段を配置"
+                help="線を結合：2つの壁線を繋ぐ\n\n線を追加：新しい壁線を追加\n\n線を削除：選択範囲の壁を削除\n\n窓を追加：窓で分断された2本の壁を上下の壁で繋ぐ\n\nオブジェクトを配置：キッチンボードなどの家具を配置\n\nオブジェクトを削除：配置した家具をクリックして削除\n\n階段を配置：コの字階段を配置"
             )
             
             if edit_mode == "線を結合":
@@ -2745,6 +2774,8 @@ def main():
                 st.write("💡 削除したい壁線をクリックしてください（複数選択可能）")
             elif edit_mode == "オブジェクトを配置":
                 st.write("💡 オブジェクトを配置したい範囲(四角形)の対角線の2点を選択して、オブジェクトタイプを入力してください。")
+            elif edit_mode == "オブジェクトを削除":
+                st.write("💡 削除したいオブジェクトをクリックしてください。")
             elif edit_mode == "階段を配置":
                 st.write("💡 階段を配置したい範囲を2点クリックして選択し、階段パターンをプルダウンから選んでください")
             
@@ -2799,6 +2830,13 @@ def main():
                         "2. 配置するオブジェクト高さと色を選択\n\n"
                         "3. 「🪑 オブジェクト配置実行」で家具を配置\n\n"
                         )
+                elif edit_mode == "オブジェクトを削除":
+                    st.markdown(
+                        "**オブジェクト削除の手順:**\n\n"
+                        "1. 下の画像上で削除したい**オブジェクトをクリック**して選択\n\n"
+                        "2. さらに削除したいオブジェクトがあればクリックして追加（赤枠で表示されます）\n\n"
+                        "3. 「🗑️ 削除実行」で選択したオブジェクトを削除\n\n"
+                        )
                 elif edit_mode == "階段を配置":
                     st.markdown(
                         "**階段配置の手順:**\n\n"
@@ -2822,6 +2860,11 @@ def main():
                 st.session_state.merge_result = None
             if 'edit_mode_state' not in st.session_state:
                 st.session_state.edit_mode_state = "線を結合"  # 現在のモード
+            if 'selected_furniture_to_delete' not in st.session_state:
+                st.session_state.selected_furniture_to_delete = []  # 削除対象の家具リスト（IDが無いのでオブジェクト全体かインデックス）
+                                                                    # ただしインデックスはずれるのでオブジェクトの等価性で判定する戦略を取る
+            if 'execute_furniture_deletion' not in st.session_state:
+                st.session_state.execute_furniture_deletion = False
 
             # 窓追加用の入力フォーム（画面上部にまとめて表示）
             if edit_mode == "窓を追加":
@@ -2956,7 +2999,46 @@ def main():
                         selected_walls_to_highlight = st.session_state.selected_walls_for_delete
                     elif edit_mode == "スケール校正" and st.session_state.selected_wall_for_calibration:
                         selected_walls_to_highlight = [st.session_state.selected_wall_for_calibration]
-                    
+                    elif edit_mode == "オブジェクトを削除" and len(st.session_state.selected_furniture_to_delete) > 0:
+                        # 削除対象として選択された家具をハイライト
+                        try:
+                            json_data_del = json.loads(st.session_state.json_bytes.decode("utf-8"))
+                            furniture_list = json_data_del.get('furniture', [])
+                            
+                            all_x = [w['start'][0] for w in json_data_del.get('walls', [])] + [w['end'][0] for w in json_data_del.get('walls', [])]
+                            all_y = [w['start'][1] for w in json_data_del.get('walls', [])] + [w['end'][1] for w in json_data_del.get('walls', [])]
+                            min_x = min(all_x)
+                            min_y = min(all_y)
+                            scale_val = int(st.session_state.viz_scale)
+                            margin_val = 50
+                            img_height_val = viz_img.height
+                            
+                            for item in st.session_state.selected_furniture_to_delete:
+                                bounds = item.get('bounds')
+                                if not bounds:
+                                    continue
+                                    
+                                x_start_px = int((bounds['x_start'] - min_x) * scale_val) + margin_val
+                                y_start_px = img_height_val - (int((bounds['y_start'] - min_y) * scale_val) + margin_val)
+                                x_end_px = int((bounds['x_end'] - min_x) * scale_val) + margin_val
+                                y_end_px = img_height_val - (int((bounds['y_end'] - min_y) * scale_val) + margin_val)
+                                
+                                # Y軸反転
+                                px_min_x = min(x_start_px, x_end_px)
+                                px_max_x = max(x_start_px, x_end_px)
+                                px_min_y = min(y_start_px, y_end_px)
+                                px_max_y = max(y_start_px, y_end_px)
+                                
+                                # 赤枠でハイライト（太さ4）
+                                cv2.rectangle(display_img_array, (px_min_x, px_min_y), (px_max_x, px_max_y), (0, 0, 255), 4)
+                                # ✕印を描画
+                                cv2.line(display_img_array, (px_min_x, px_min_y), (px_max_x, px_max_y), (0, 0, 255), 2)
+                                cv2.line(display_img_array, (px_max_x, px_min_y), (px_min_x, px_max_y), (0, 0, 255), 2)
+                                
+                        except Exception as e:
+                            print(f"[ERROR] 家具ハイライト描画エラー: {e}")
+                            pass
+
                     if len(selected_walls_to_highlight) > 0:
                         try:
                             json_data_highlight = json.loads(st.session_state.json_bytes.decode("utf-8"))
@@ -3813,6 +3895,15 @@ def main():
                                 st.session_state.skip_click_processing = True  # クリック処理をスキップ
                                 # 即座にrerunして選択状態をクリア（次のrerunで実際の処理を実行）
                                 st.rerun()
+                    elif edit_mode == "オブジェクトを削除":
+                        # オブジェクト削除モード
+                        num_selected = len(st.session_state.selected_furniture_to_delete)
+                        if num_selected > 0:
+                            st.markdown("---")
+                            st.success(f"✅ **{num_selected}個のオブジェクトを選択中**")
+                            if st.button("🗑️ 削除実行", type="primary", key="btn_furn_delete_exec"):
+                                st.session_state.execute_furniture_deletion = True
+                                st.rerun()
                     elif edit_mode == "階段を配置":
                         # 階段追加モード：2点選択
                         if len(st.session_state.rect_coords_list) > 0:
@@ -4288,6 +4379,50 @@ def main():
                                         st.rerun()
                                 except Exception as e:
                                     st.error(f"壁選択エラー: {e}")
+                        elif edit_mode == "オブジェクトを削除":
+                            # オブジェクト削除モード：クリックでオブジェクトを選択
+                            if st.session_state.last_click == new_point:
+                                pass
+                            else:
+                                try:
+                                    json_data_furn = json.loads(st.session_state.json_bytes.decode("utf-8"))
+                                    furniture_list = json_data_furn.get('furniture', [])
+                                    
+                                    # スケール情報を取得（壁データから）
+                                    json_data_walls_t = json_data_furn.get('walls', [])
+                                    all_x_t = [w['start'][0] for w in json_data_walls_t] + [w['end'][0] for w in json_data_walls_t]
+                                    all_y_t = [w['start'][1] for w in json_data_walls_t] + [w['end'][1] for w in json_data_walls_t]
+                                    min_x_t = min(all_x_t)
+                                    min_y_t = min(all_y_t)
+                                    scale_t = int(st.session_state.viz_scale)
+                                    margin_t = 50
+                                    img_height_t = viz_img.height
+                                    
+                                    # クリック位置にある家具を探索
+                                    item, idx = _find_furniture_at_click(
+                                        new_point[0], new_point[1],
+                                        furniture_list, scale_t, margin_t, img_height_t, min_x_t, min_y_t
+                                    )
+                                    
+                                    if item is not None:
+                                        # 既に選択されているかチェック（辞書の比較は==で動作する）
+                                        already_selected = False
+                                        for sel in st.session_state.selected_furniture_to_delete:
+                                            # positionとboundsなど主要なキーで比較
+                                            if (sel.get('position') == item.get('position') and 
+                                                sel.get('bounds') == item.get('bounds')):
+                                                already_selected = True
+                                                st.session_state.selected_furniture_to_delete.remove(sel)
+                                                break
+                                        
+                                        if not already_selected:
+                                            st.session_state.selected_furniture_to_delete.append(item)
+                                            
+                                        st.session_state.last_click = new_point
+                                        st.rerun()
+                                except Exception as e:
+                                    st.error(f"家具選択エラー: {e}")
+
                         elif edit_mode == "スケール校正":
                             # スケール校正モード：壁を1クリックで選択
                             if st.session_state.last_click != new_point:
@@ -4958,6 +5093,9 @@ def main():
                     elif edit_mode == "オブジェクトを配置" and st.session_state.get('execute_furniture_placement'):
                         st.session_state.execute_furniture_placement = False
                         should_execute = True
+                    elif edit_mode == "オブジェクトを削除" and st.session_state.get('execute_furniture_deletion'):
+                        st.session_state.execute_furniture_deletion = False
+                        should_execute = True
                     elif edit_mode == "階段を配置" and st.session_state.get('execute_stair_placement'):
                         st.session_state.execute_stair_placement = False
                         should_execute = True
@@ -5076,7 +5214,63 @@ def main():
                                     _reset_selection_state()
                                 except Exception as e:
                                     st.error(f"保存エラー: {e}")
-                                
+                            
+                            elif edit_mode == "オブジェクトを削除":
+                                # ===== オブジェクト削除モード =====
+                                targets = st.session_state.selected_furniture_to_delete
+                                if not targets:
+                                    st.warning("削除対象が選択されていません。")
+                                else:
+                                    current_furniture = updated_json.get('furniture', [])
+                                    new_furniture = []
+                                    deleted_count = 0
+                                    
+                                    # 削除対象に含まれないものだけを残す
+                                    for item in current_furniture:
+                                        is_target = False
+                                        for target in targets:
+                                            # positionとboundsで一致判定
+                                            if (item.get('position') == target.get('position') and 
+                                                item.get('bounds') == target.get('bounds')):
+                                                is_target = True
+                                                break
+                                        
+                                        if not is_target:
+                                            new_furniture.append(item)
+                                        else:
+                                            deleted_count += 1
+                                    
+                                    updated_json['furniture'] = new_furniture
+                                    
+                                    # 自動保存
+                                    try:
+                                        temp_json_path = Path(st.session_state.out_dir) / "walls_3d_edited.json"
+                                        with open(temp_json_path, 'w', encoding='utf-8') as f:
+                                            json.dump(updated_json, f, ensure_ascii=False, indent=2)
+
+                                        temp_viz_path = Path(st.session_state.out_dir) / "visualization_edited.png"
+                                        visualize_3d_walls(str(temp_json_path), str(temp_viz_path), scale=int(viz_scale), highlight_wall_ids=[], wall_color=(0, 0, 0), bg_color=(255, 255, 255))
+
+                                        temp_viewer_path = Path(st.session_state.out_dir) / "viewer_3d_edited.html"
+                                        _generate_3d_viewer_html(temp_json_path, temp_viewer_path)
+
+                                        # セッション更新
+                                        st.session_state.json_bytes = temp_json_path.read_bytes()
+                                        st.session_state.json_name = temp_json_path.name
+                                        st.session_state.viz_bytes = temp_viz_path.read_bytes()
+                                        st.session_state.viewer_html_bytes = temp_viewer_path.read_bytes()
+                                        st.session_state.viewer_html_name = temp_viewer_path.name
+                                        
+                                        # 選択クリア
+                                        st.session_state.selected_furniture_to_delete = []
+                                        _reset_selection_state()
+                                        
+                                        st.success(f"✅ {deleted_count}個のオブジェクトを削除しました。")
+                                        time.sleep(0.5)
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"削除保存エラー: {e}")
+
                             elif edit_mode == "階段を配置":
                                 # ===== 階段を配置モード =====
                                 # 選択範囲がない場合のエラーチェック

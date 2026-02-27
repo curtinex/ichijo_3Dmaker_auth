@@ -168,6 +168,67 @@ if _st_canvas_available and _st_image_module is not None and not hasattr(_st_ima
 from PIL import Image
 import stripe
 import streamlit.components.v1 as components
+
+# 独自コンポーネント用のヘルパー
+def clickable_canvas(image_data_url, width, height, key=None):
+    # HTMLファイルを読み込む
+    try:
+        # BASE_DIRがこのスコープで利用可能か確認、なければ定義
+        if 'BASE_DIR' not in globals():
+            BASE_DIR = Path(__file__).parent
+
+        with open(BASE_DIR / "clickable_canvas.html", "r", encoding="utf-8") as f:
+            html_template = f.read()
+    except (FileNotFoundError, NameError):
+        st.error("`clickable_canvas.html` が見つかりません。")
+        return None
+
+    # HTMLをコンポーネントとしてレンダリングし、戻り値（クリック座標）を取得
+    component_value = components.html(
+        html_template,
+        width=width,
+        height=height,
+        key=key,
+    )
+
+    # Streamlitに画像データを送信するためのJavaScriptを注入
+    # このスクリプトはコンポーネントがマウントされた後に一度だけ実行される
+    # ユニークなキーを使って正しいiframeをターゲットにする
+    # `components.html`はiframeを生成するため、そのiframeに対してpostMessageで通信する
+    # `key`をエスケープして、JavaScript文字列内で安全に使用できるようにする
+    js_key = key.replace("'", "\\'")
+    js_code = f"""
+        <script>
+        (function() {{
+            const checkFrame = () => {{
+                // `key`に基づいてiframeを特定するセレクタ
+                const frame = parent.document.querySelector('iframe[srcdoc*="{js_key}"]');
+                if (frame && frame.contentWindow) {{
+                    // 画像データを送信
+                    frame.contentWindow.postMessage({{
+                        type: "SET_IMAGE",
+                        imageDataUrl: "{image_data_url}",
+                        width: {width},
+                        height: {height}
+                    }}, "*");
+                }} else {{
+                    // フレームが見つからない場合はリトライ
+                    setTimeout(checkFrame, 100);
+                }}
+            }};
+            // DOMの準備ができてから実行
+            if (document.readyState === 'complete') {{
+                checkFrame();
+            }} else {{
+                window.addEventListener('load', checkFrame);
+            }}
+        }})();
+        </script>
+    """
+    st.components.v1.html(js_code, height=0)
+
+    return component_value
+
 # --- Supabase helper and simple Auth UI (uses SUPA_URL and SUPA_ANON from Streamlit secrets or env) ---
 def get_supabase():
     import streamlit as _st

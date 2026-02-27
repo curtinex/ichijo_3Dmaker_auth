@@ -129,74 +129,9 @@ import numpy as np
 import streamlit as st
 import fitz  # PyMuPDF (for page count)
 from streamlit_image_coordinates import streamlit_image_coordinates
-try:
-    from streamlit_drawable_canvas import st_canvas
-    _st_canvas_available = True
-except Exception:
-    st_canvas = None
-    _st_canvas_available = False
-# PIL画像をdata URLに変換する簡易ヘルパー（高速キャンバス用）
-def _pil_to_data_url(img, fmt="PNG"):
-    try:
-        buf = io.BytesIO()
-        img.save(buf, format=fmt)
-        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-        return f"data:image/{fmt.lower()};base64,{b64}"
-    except Exception:
-        return None
-# streamlit_drawable_canvas が古い Streamlit API に依存しているため、互換用のimage_to_urlを埋め込む
-try:
-    import streamlit.elements.image as _st_image_module
-except Exception:
-    _st_image_module = None
-
-if _st_canvas_available and _st_image_module is not None and not hasattr(_st_image_module, "image_to_url"):
-    def _shim_image_to_url(image, width=None, clamp=False, channels="RGB", output_format="PNG", image_id=None):
-        """最小限の互換: PIL.Image を data URL にして返す"""
-        try:
-            import PIL.Image
-            if not isinstance(image, PIL.Image.Image):
-                return None
-            buf = io.BytesIO()
-            image.save(buf, format=output_format)
-            data = base64.b64encode(buf.getvalue()).decode("ascii")
-            return f"data:image/{output_format.lower()};base64,{data}"
-        except Exception:
-            return None
-
-    _st_image_module.image_to_url = _shim_image_to_url
 from PIL import Image
 import stripe
 import streamlit.components.v1 as components
-
-# 独自コンポーネント用のヘルパー
-def clickable_canvas(image_data_url, width, height, key=None):
-    # HTMLファイルを読み込む
-    try:
-        # BASE_DIRがこのスコープで利用可能か確認、なければ定義
-        if 'BASE_DIR' not in globals():
-            BASE_DIR = Path(__file__).parent
-
-        with open(BASE_DIR / "clickable_canvas.html", "r", encoding="utf-8") as f:
-            html_template = f.read()
-    except (FileNotFoundError, NameError):
-        st.error("`clickable_canvas.html` が見つかりません。")
-        return None
-
-    # プレースホルダーを実際の値に置換
-    html_content = html_template.replace("__IMAGE_DATA_URL__", image_data_url)
-    html_content = html_content.replace("__CANVAS_WIDTH__", str(width))
-    html_content = html_content.replace("__CANVAS_HEIGHT__", str(height))
-
-    # HTMLをコンポーネントとしてレンダリングし、戻り値（クリック座標）を取得
-    component_value = components.html(
-        html_content,
-        width=width,
-        height=height,
-        key=key,
-    )
-
-    return component_value
 
 # --- Supabase helper and simple Auth UI (uses SUPA_URL and SUPA_ANON from Streamlit secrets or env) ---
 def get_supabase():
@@ -4171,18 +4106,6 @@ def main():
                         if st.button("🔍+", key="step3_zoom_in"):
                             st.session_state.editor_zoom_level = min(1.6, st.session_state.editor_zoom_level + 0.2)
                             st.rerun()
-
-                    # 高速キャンバスモード（ブラウザ描画）
-                    if _st_canvas_available:
-                        use_fast_canvas = st.checkbox(
-                            "高速キャンバス（ブラウザ描画、β）",
-                            value=st.session_state.get("step3_fast_canvas", True),
-                            key="step3_fast_canvas",
-                            help="ブラウザ側でポイント描画するためクリック反応が速いモードです。オフにすると従来のサーバー描画に戻します。"
-                        )
-                    else:
-                        use_fast_canvas = False
-                    
                     
                     # 画像データの検証（表示エラー対策）
                     if display_img_resized is None:
@@ -4196,70 +4119,10 @@ def main():
                         st.rerun()
                     
                     # 画像を元のサイズで表示（リサイズなし）
-                    value = None
-                    if use_fast_canvas:
-                        # 背景が取得できなければ高速モードを自動オフにする
-                        try:
-                            # 余白付き表示画像をキャンバス用にRGB化し、必要なら1200pxまで縮小
-                            bg_image = display_img_resized.copy() if hasattr(display_img_resized, "copy") else display_img_resized
-                            if hasattr(bg_image, "convert"):
-                                bg_image = bg_image.convert("RGB")
-                            if bg_image is None:
-                                raise ValueError("background image is None")
-                            if bg_image.width > 1200:
-                                ratio = 1200 / bg_image.width
-                                bg_image = bg_image.resize((1200, int(bg_image.height * ratio)), Image.Resampling.LANCZOS)
-                        except Exception:
-                            bg_image = None
-                            use_fast_canvas = False
-                            st.warning("⚠️ 背景画像の準備に失敗したため高速キャンバスをオフにしました。従来表示に戻します。")
-
-                    if use_fast_canvas:
-                        # デバッグ: 背景の寸法とモードを表示
-                        bg_url = None
-                        try:
-                            if '_shim_image_to_url' in globals():
-                                bg_url = _shim_image_to_url(bg_image, output_format="PNG")
-                            if not bg_url:
-                                bg_url = _pil_to_data_url(bg_image, fmt="PNG")
-                        except Exception:
-                            bg_url = None
-
-                        with st.expander("高速キャンバス背景プレビュー", expanded=False):
-                            st.caption(f"mode={getattr(bg_image, 'mode', 'n/a')}, size={getattr(bg_image, 'size', 'n/a')}, url={'yes' if bg_url else 'no'}")
-                            try:
-                                st.image(bg_image, width=min(400, bg_image.width))
-                            except Exception:
-                                pass
-
-                        canvas_result = st_canvas(
-                            fill_color="rgba(255, 0, 0, 0.6)",
-                            stroke_width=10,
-                            stroke_color="#ff0000",
-                            # st_canvas はPIL Imageを期待する。data URLを渡すと内部でheight属性アクセスで落ちるため、ここはPILのみ渡す。
-                            background_image=bg_image,
-                            update_streamlit=True,
-                            height=bg_image.height,
-                            width=bg_image.width,
-                            drawing_mode="point",
-                            key=f"canvas_{coord_key}",
-                            display_toolbar=False
-                        )
-
-                        if canvas_result and canvas_result.json_data:
-                            objects = canvas_result.json_data.get("objects", [])
-                            if objects:
-                                last_obj = objects[-1]
-                                radius = last_obj.get("radius", 0) or 0
-                                value = {
-                                    "x": (last_obj.get("left", 0) or 0) + radius,
-                                    "y": (last_obj.get("top", 0) or 0) + radius,
-                                }
-                    else:
-                        value = streamlit_image_coordinates(
-                            display_img_resized,
-                            key=coord_key
-                        )
+                    value = streamlit_image_coordinates(
+                        display_img_resized,
+                        key=coord_key
+                    )
                     
                     # リセットボタンを画像の下に配置
                     col_reset, col_space = st.columns([2, 10])

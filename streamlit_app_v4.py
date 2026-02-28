@@ -133,13 +133,13 @@ from PIL import Image
 import stripe
 import streamlit.components.v1 as components
 
-# --- Supabase helper and simple Auth UI (uses SUPA_URL and SUPA_ANON from Streamlit secrets or env) ---
+# --- Supabase helper and simple Auth UI (uses SUPA_URL and SUPA_SERVICE_ROLE from Streamlit secrets or env) ---
 def get_supabase():
     import streamlit as _st
     # Try Streamlit secrets first
     try:
         url = _st.secrets.get("SUPA_URL")
-        key = _st.secrets.get("SUPA_ANON")
+        key = _st.secrets.get("SUPA_SERVICE_ROLE")
     except Exception:
         url = None
         key = None
@@ -148,7 +148,7 @@ def get_supabase():
     if not url:
         url = os.environ.get("SUPA_URL")
     if not key:
-        key = os.environ.get("SUPA_ANON")
+        key = os.environ.get("SUPA_SERVICE_ROLE")
 
     if not url or not key:
         return None
@@ -439,7 +439,7 @@ with st.sidebar.expander("アカウント設定"):
                 auth_mode = None
         if auth_mode == "会員登録":
             su_email = st.text_input("Email", key="su_email")
-            su_pwd = st.text_input("Password", type="password", key="su_pwd", placeholder="6文字以上で入力してください")
+            su_pwd = st.text_input("Password", type="password", key="su_pwd", placeholder="6文字以上で入力")
             
             # 会員登録して無料トライアルを開始 (メール認証 + パスワードのみ)
             if st.button("会員登録して無料トライアルを開始", key="trial_btn"):
@@ -478,7 +478,7 @@ with st.sidebar.expander("アカウント設定"):
                             supabase.table('members').upsert(upsert_payload, on_conflict='email').execute()
                             st.info("トライアル情報を記録しました。")
                         except Exception as e:
-                            st.warning("トライアルは作成されましたが、members テーブルへの記録に失敗しました。管理者に連絡してください。")
+                            st.warning(f"トライアルは作成されましたが、members テーブルへの記録に失敗しました。管理者に連絡してください。エラー詳細: {type(e).__name__} - {e}")
                     except Exception as e:
                         st.error(f"Sign up failed: {type(e).__name__}: {e}")
         elif auth_mode == "ログイン":

@@ -449,36 +449,6 @@ with st.sidebar.expander("アカウント設定"):
                     try:
                         res = supabase.auth.sign_up({"email": su_email, "password": su_pwd})
                         st.success("確認メールを送信しました。メールのリンクでアカウントを有効化してください。\n同時に無料トライアル（15日間）を付与しました。")
-                        # Compute trial expiry
-                        trial_expires = (datetime.utcnow() + timedelta(days=15)).isoformat()
-                        # Try to extract user id from response if available
-                        user_id = None
-                        try:
-                            if isinstance(res, dict) and res.get("user"):
-                                user_id = res["user"].get("id")
-                            else:
-                                # supabase-py may return an object with attribute 'user'
-                                user_obj = getattr(res, 'user', None)
-                                if user_obj:
-                                    user_id = getattr(user_obj, 'id', None)
-                        except Exception:
-                            user_id = None
-
-                        upsert_payload = {
-                            "email": su_email,
-                            "plan": "free",
-                            "trial_expires": trial_expires,
-                            "has_had_trial": True,
-                        }
-                        if user_id:
-                            upsert_payload["user_id"] = user_id
-
-                        try:
-                            # emailを基準に既存データがあれば上書き（upsert）するよう明示
-                            supabase.table('members').upsert(upsert_payload, on_conflict='email').execute()
-                            st.info("トライアル情報を記録しました。")
-                        except Exception as e:
-                            st.warning(f"トライアルは作成されましたが、members テーブルへの記録に失敗しました。管理者に連絡してください。エラー詳細: {type(e).__name__} - {e}")
                     except Exception as e:
                         st.error(f"Sign up failed: {type(e).__name__}: {e}")
         elif auth_mode == "ログイン":
